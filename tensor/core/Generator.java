@@ -2,13 +2,21 @@ package tensor.core;
 
 import java.util.Random;
 
-public class TensorFactory {
+public class Generator {
   private static final Random RANDOM = new Random();
 
-  public static double[] generateRandom(int size) {
+  public static double[] generateGaussian(int size) {
     double[] data = new double[size];
     for (int i = 0; i < size; i++) {
       data[i] = RANDOM.nextGaussian();
+    }
+    return data;
+  }
+
+  public static double[] generateExponential(int size) {
+    double[] data = new double[size];
+    for (int i = 0; i < size; i++) {
+      data[i] = RANDOM.nextExponential();
     }
     return data;
   }
