@@ -176,7 +176,7 @@ public class Tensor {
   }
   
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // TENSOR OPERATIONS
+  // STATIC TENSOR OPERATIONS
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   
   /**
@@ -192,16 +192,6 @@ public class Tensor {
   }
 
   /**
-   * Applies a unary operation to all elements of this tensor.
-   *
-   * @param operation the unary operation to apply
-   * @return a new tensor containing the results
-   */
-  public Tensor apply(Unary operation) {
-    return apply(this, operation);
-  }
-
-  /**
    * Adds a constant value to all elements of the given tensor.
    *
    * @param tensor the input tensor
@@ -213,16 +203,6 @@ public class Tensor {
   }
 
   /**
-   * Adds a constant value to all elements of this tensor.
-   *
-   * @param value the constant value to add
-   * @return a new tensor containing the results
-   */
-  public Tensor add(double value) {
-    return add(this, value);
-  }
-
-  /**
    * Multiplies all elements of the given tensor by a constant value.
    *
    * @param tensor the input tensor
@@ -231,16 +211,6 @@ public class Tensor {
    */
   public static Tensor mul(Tensor tensor, double value) {
     return apply(tensor, x -> x * value);
-  }
-
-  /**
-   * Multiplies all elements of this tensor by a constant value.
-   *
-   * @param value the constant value to multiply by
-   * @return a new tensor containing the results
-   */
-  public Tensor mul(double value) {
-    return mul(this, value);
   }
 
   // BINARY
@@ -263,17 +233,6 @@ public class Tensor {
   }
 
   /**
-   * Combines this tensor with another tensor using a binary operation elementwise.
-   *
-   * @param other the other tensor to combine with
-   * @param operation the binary operation to apply
-   * @return a new tensor containing the results
-   */
-  public Tensor combine(Tensor other, Binary operation) {
-    return combine(this, other, operation);
-  }
-
-  /**
    * Adds two tensors elementwise.
    *
    * @param a the first tensor
@@ -282,16 +241,6 @@ public class Tensor {
    */
   public static Tensor add(Tensor a, Tensor b) {
     return combine(a, b, (x, y) -> x + y);
-  }
-
-  /**
-   * Adds another tensor to this tensor elementwise.
-   *
-   * @param other the other tensor to add
-   * @return a new tensor containing the result of the addition
-   */
-  public Tensor add(Tensor other) {
-    return add(this, other);
   }
 
   /**
@@ -306,16 +255,6 @@ public class Tensor {
   }
 
   /**
-   * Multiplies this tensor with another tensor elementwise.
-   *
-   * @param other the other tensor to multiply
-   * @return a new tensor containing the result of the multiplication
-   */
-  public Tensor hadamard(Tensor other) {
-    return hadamard(this, other);
-  }
-
-  /**
    * Exponentiates two tensors elementwise.
    *
    * @param a the base tensor
@@ -326,21 +265,7 @@ public class Tensor {
     return combine(a, b, Math::pow);
   }
 
-  /**
-   * Exponentiates this tensor by another tensor elementwise.
-   *
-   * @param other the tensor containing the exponents
-   * @return a new tensor containing the result of the exponentiation
-   */
-  public Tensor pow(Tensor other) {
-    return pow(this, other);
-  }
-
   public static Tensor contract(Tensor a, Tensor b, int[] indeciesA, int[] indicesB) {
-    return null;
-  }
-
-  public Tensor contract(Tensor b, int[] indeciesA, int[] indicesB) {
     return null;
   }
 
@@ -348,24 +273,109 @@ public class Tensor {
     return null;
   }
 
-  public Tensor correlate(Tensor b) {
-    return null;
-  }
-
   public static Tensor outer(Tensor a, Tensor b) {
-    return null;
-  }
-
-  public Tensor outer(Tensor b) {
     return null;
   }
 
   public static Tensor transposedConvolution(Tensor a, Tensor b) {
     return null;
   }
+  
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // INSTANCE TENSOR OPERATIONS
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  public Tensor transposedConvolution(Tensor b) {
-    return null;
+  /**
+   * Applies a unary operation to all elements of this tensor.
+   *
+   * @param operation the unary operation to apply
+   * @return a new tensor containing the results
+   */
+  public Tensor apply(Unary operation) {return Tensor.apply(this, operation);}
+
+  /**
+   * Adds a constant value to all elements of this tensor.
+   *
+   * @param value the constant value to add
+   * @return a new tensor containing the results
+   */
+  public Tensor add(double value) {return Tensor.add(this, value);}
+
+  /**
+   * Multiplies all elements of this tensor by a constant value.
+   *
+   * @param value the constant value to multiply by
+   * @return a new tensor containing the results
+   */
+  public Tensor mul(double value) {return Tensor.mul(this, value);}
+
+  /**
+   * Combines this tensor with another tensor using a binary operation elementwise.
+   *
+   * @param other the other tensor to combine with
+   * @param operation the binary operation to apply
+   * @return a new tensor containing the results
+   */
+  public Tensor combine(Tensor other, Binary operation) {return Tensor.combine(this, other, operation);}
+
+  /**
+   * Adds another tensor to this tensor elementwise.
+   *
+   * @param other the other tensor to add
+   * @return a new tensor containing the result of the addition
+   */
+  public Tensor add(Tensor other) {return Tensor.add(this, other);}
+
+  /**
+   * Multiplies this tensor with another tensor elementwise.
+   *
+   * @param other the other tensor to multiply
+   * @return a new tensor containing the result of the multiplication
+   */
+  public Tensor hadamard(Tensor other) {return Tensor.hadamard(this, other);}
+
+  /**
+   * Exponentiates this tensor by another tensor elementwise.
+   *
+   * @param other the tensor containing the exponents
+   * @return a new tensor containing the result of the exponentiation
+   */
+  public Tensor pow(Tensor other) {return Tensor.pow(this, other);}
+
+  /**
+   * Contracts this tensor with another tensor.
+   *
+   * @param b the other tensor to contract with
+   * @param indeciesA the indices of the first tensor to contract along
+   * @param indicesB the indices of the second tensor to contract along
+   * @return a new tensor containing the result of the contraction
+   */
+  public Tensor contract(Tensor b, int[] indeciesA, int[] indicesB) {return Tensor.contract(this, b, indeciesA, indicesB);}
+
+  /**
+   * Correlates this tensor with another tensor.
+   *
+   * @param b the other tensor to correlate with
+   * @return a new tensor containing the result of the correlation
+   */
+  public Tensor correlate(Tensor b) {return Tensor.correlate(this, b);}
+  
+  /**
+   * Computes the outer product of two tensors
+   * 
+   * @param b the other tensor to compute the outer product with
+   * @return a new tensor containing the result of the outer product
+   */
+  public Tensor outer(Tensor b) {return Tensor.outer(this, b);
+  }
+
+  /**
+   * Computes the transposed convolution of two tensors
+   * 
+   * @param b the other tensor to compute the transposed convolution with
+   * @return a new tensor containing the result of the transposed convolution
+   */
+  public Tensor transposedConvolution(Tensor b) {return Tensor.transposedConvolution(this, b);
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
