@@ -3,49 +3,32 @@ import tensor.core.Engine;
 
 @FunctionalInterface
 public interface Reduction {
-  double reduce(double accumulator, double nextValue);
-  default double identity() {return 0;}
-  
-  Reduction SUM = new Reduction() {
-    @Override public double reduce(double acc, double val) {return acc + val;}
-    @Override public double identity() {return 0;}
-  };
-  
-  Reduction PROD = new Reduction() {
-    @Override public double reduce(double acc, double val) {return acc * val;}
-    @Override public double identity() {return 1.0;}
-  };
-  
-  Reduction MAX = new Reduction() {
-    @Override public double reduce(double acc, double val) {return Math.max(acc, val);}
-    @Override public double identity() {return Double.NEGATIVE_INFINITY;}
-  };
-  
-  Reduction MIN = new Reduction() {
-    @Override public double reduce(double acc, double val) {return Math.min(acc, val);}
-    @Override public double identity() {return Double.POSITIVE_INFINITY;}
-  };
+  double reduce(double[] accumulator);
   
   public static double[] apply(double[] data, int[] shape, int[] strides, int[] axes, Reduction operation) {
     int[] resShape = Engine.getSurvivors(shape, axes);
     double[] resData = new double[Engine.sizeOf(resShape)];
     
-    int[] subShape = Engine.getSubShape(shape, axes);
+    int[] subShape = Engine.getSubShape(shape, axes); // size of one slice
     int reductionVolume = Engine.sizeOf(subShape);
 
     int[] resCoords = new int[resShape.length];
     int resIdx = 0;
 
-    do {
-      double acc = operation.identity();
-      for (int k = 0; k < reductionVolume; k++) {
-        int[] kCoords = Engine.unravel(k, subShape);
+    double[] subShapeData = new double[Engine.sizeOf(subShape)];
 
+    do {
+      for (int k = 0; k < reductionVolume; k++) { // fills up the resulting spot by looping over the slice
+        int[] kCoords = Engine.unravel(k, subShape); // get the sliced indices of the kth element
+
+        // map coords to offset coors suitable for the 1d data
         int offset = Engine.mapToOffset(resCoords, kCoords, axes, shape, strides, true);
-        acc = operation.reduce(acc, data[offset]);
+        subShapeData[k] = data[offset];
       }
 
-      resData[resIdx++] = acc;
+      double ans = operation.reduce(subShapeData);
+
+      resData[resIdx++] = ans;
     } while (Engine.nextCoordinate(resCoords, resShape));
 
     return resData;
