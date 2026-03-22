@@ -73,6 +73,59 @@ public class Engine {
     return resShape;
   }
 
+  public static int[][] getResultAxes(int[] shapeA, int[] shapeB, int[] axesA, int[] axesB) {
+    int[] survivorsA = getSurvivors(shapeA, axesA);
+    int[] survivorsB = getSurvivors(shapeB, axesB);
+
+    int[] axesFromA = new int[survivorsA.length];
+    int[] axesFromB = new int[survivorsB.length];
+
+    for (int i = 0; i < axesFromA.length; i++) {
+      axesFromA[i] = i;
+    }
+
+    for (int i = 0; i < axesFromB.length; i++) {
+      axesFromB[i] = survivorsA.length + i;
+    }
+
+    return new int[][] { axesFromA, axesFromB };
+  }
+
+  public static double[] broadcastGrad(double[] gradOutput, int[] gradShape, int[] inputShape, int[] axes) {
+    double[] result = new double[Engine.sizeOf(inputShape)];
+
+    int[] inputStrides = Engine.calculateStrides(inputShape);
+    int[] gradStrides  = Engine.calculateStrides(gradShape);
+
+    for (int i = 0; i < result.length; i++) {
+      int remaining = i;
+      int gradIndex = 0;
+
+      for (int dim = 0, g = 0; dim < inputShape.length; dim++) {
+        int coord = remaining / inputStrides[dim];
+        remaining %= inputStrides[dim];
+
+        // if this dimension was reduced, skip it
+        boolean reduced = false;
+        for (int ax : axes) {
+          if (ax == dim) {
+            reduced = true;
+            break;
+          }
+        }
+
+        if (!reduced) {
+          gradIndex += coord * gradStrides[g];
+          g++;
+        }
+      }
+
+      result[i] = gradOutput[gradIndex];
+    }
+
+    return result;
+  }
+
   public static int[] getSurvivors(int[] shape, int[] axes) {
     int[] survivors = new int[shape.length - axes.length];
 
@@ -150,17 +203,13 @@ public class Engine {
     return vol;
   }
 
-  ///////////////////////////////////////////////////////////////////////////////////////////////////
-  // PRIVATE
-  ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-  private static int[] getSubShape(int[] fullShape, int[] axes) {
+  public static int[] getSubShape(int[] fullShape, int[] axes) {
     int[] subShape = new int[axes.length];
     for (int i = 0; i < axes.length; i++) subShape[i] = fullShape[axes[i]];
     return subShape;
   }
 
-  private static boolean contains(int[] arr, int val) {
+  public static boolean contains(int[] arr, int val) {
     for (int i : arr) if (i == val) return true;
     return false;
   }

@@ -1,4 +1,4 @@
-package tensor.operation;
+package tensor.ops;
 import tensor.core.Engine;
 
 @FunctionalInterface
@@ -6,32 +6,32 @@ public interface Reduction {
   double reduce(double accumulator, double nextValue);
   default double identity() {return 0;}
   
-  Reduction sum = new Reduction() {
+  Reduction SUM = new Reduction() {
     @Override public double reduce(double acc, double val) {return acc + val;}
     @Override public double identity() {return 0;}
   };
   
-  Reduction prod = new Reduction() {
+  Reduction PROD = new Reduction() {
     @Override public double reduce(double acc, double val) {return acc * val;}
     @Override public double identity() {return 1.0;}
   };
   
-  Reduction max = new Reduction() {
+  Reduction MAX = new Reduction() {
     @Override public double reduce(double acc, double val) {return Math.max(acc, val);}
     @Override public double identity() {return Double.NEGATIVE_INFINITY;}
   };
   
-  Reduction min = new Reduction() {
+  Reduction MIN = new Reduction() {
     @Override public double reduce(double acc, double val) {return Math.min(acc, val);}
     @Override public double identity() {return Double.POSITIVE_INFINITY;}
   };
   
   public static double[] apply(double[] data, int[] shape, int[] strides, int[] axes, Reduction operation) {
     int[] resShape = Engine.getSurvivors(shape, axes);
-    double[] resData = new double[Engine.calculateVolume(resShape)];
+    double[] resData = new double[Engine.sizeOf(resShape)];
     
     int[] subShape = Engine.getSubShape(shape, axes);
-    int reductionVolume = Engine.calculateVolume(subShape);
+    int reductionVolume = Engine.sizeOf(subShape);
 
     int[] resCoords = new int[resShape.length];
     int resIdx = 0;
@@ -41,7 +41,7 @@ public interface Reduction {
       for (int k = 0; k < reductionVolume; k++) {
         int[] kCoords = Engine.unravel(k, subShape);
 
-        int offset = Engine.mapToOffset(resCoords, kCoords, axes, shape, strides);
+        int offset = Engine.mapToOffset(resCoords, kCoords, axes, shape, strides, true);
         acc = operation.reduce(acc, data[offset]);
       }
 

@@ -1,4 +1,4 @@
-package tensor.operation;
+package tensor.ops;
 
 @FunctionalInterface
 public interface Binary {
