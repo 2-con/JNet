@@ -1,4 +1,4 @@
-package core.initializer;
+package nn.initializer;
 
 public class Initializer {
   

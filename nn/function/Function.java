@@ -1,4 +1,4 @@
-package core.function;
+package nn.function;
 
 public class Function {
   

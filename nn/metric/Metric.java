@@ -1,4 +1,4 @@
-package core.metric;
+package nn.metric;
 
 public class Metric {
   

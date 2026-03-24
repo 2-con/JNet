@@ -1,4 +1,4 @@
-package core;
+package nn;
 
 public class DataLoader {
   

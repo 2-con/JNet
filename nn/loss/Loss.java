@@ -1,4 +1,4 @@
-package core.loss;
+package nn.loss;
 
 public class Loss {
   

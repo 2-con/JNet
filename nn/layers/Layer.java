@@ -1,4 +1,4 @@
-package core.layers;
+package nn.layers;
 
 public interface Layer {
 }

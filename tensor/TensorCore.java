@@ -2,10 +2,13 @@ package tensor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import tensor.core.Engine;
+import tensor.core.Memory;
 import tensor.core.Utility;
 import tensor.ops.Binary;
 import tensor.ops.Reduction;
 import tensor.ops.Unary;
+import tensor.tools.ArrayTools;
+import tensor.tools.Statistics;
 
 public class TensorCore {
   private final double[] data;
@@ -25,7 +28,7 @@ public class TensorCore {
 
     this.data = data.clone();
     this.shape = shape.clone();
-    this.strides = Utility.calculateStrides(shape);
+    this.strides = Memory.calculateStrides(shape);
     this.rank = this.shape.length;
     this.size = this.data.length;
   }
@@ -35,7 +38,7 @@ public class TensorCore {
     for (int d : shape) expectedSize *= d;
 
     if (data.length != expectedSize) {
-      throw new IllegalArgumentException("Tensor of size " + data.length + " cannot be reshaped to shape " + Arrays.toString(shape));
+      throw new IllegalArgumentException("Tensor of size " + data.length + " cannot be shaped to " + Arrays.toString(shape));
     }
 
     this.data = data.clone();
@@ -195,11 +198,38 @@ public class TensorCore {
    * @throws IllegalArgumentException if the size of the input tensor does not match the size of the specified shape
    */
   public static TensorCore reshape(TensorCore tensor, int... shape) {
-    if (tensor.size != Utility.sizeOf(shape)) {
-      throw new IllegalArgumentException("Insufficient elements to reshape Tensor" + Arrays.toString(tensor.shape) + " (size " + tensor.size + ") into Tensor" + Arrays.toString(shape) + " (size " + tensor.size + ")");
+    if (tensor.size != Statistics.prod(shape)) {
+      throw new IllegalArgumentException("Insufficient elements to reshape tensor of shape " + Arrays.toString(tensor.shape) + " (size " + tensor.size + ") into a tensor of shape " + Arrays.toString(shape) + " (size " + tensor.size + ")");
     }
 
-    return new TensorCore(tensor.data, shape);
+    int countNegatives = 0;
+    for (int n : shape) {
+      if (n < -1) {
+        throw new IllegalArgumentException("Dimension inference only works on -1, got " + n + " instead");
+      }
+      if (n == -1) {
+        countNegatives++;
+      }
+      if (countNegatives > 1) {
+        throw new IllegalArgumentException("Only one dimension can be inferred, got " + countNegatives + " dimensions to infer");
+      }
+    }
+
+    int[] newShape = Utility.inferShape(tensor.shape, shape);
+
+    return new TensorCore(tensor.data, newShape);
+  }
+
+   // TODO: actually impliment this
+  public static TensorCore concat(int axis, TensorCore... tensors) {
+    System.out.println("Not implemented yet");
+    return null;
+  }
+
+  // TODO: actually impliment this
+  public static TensorCore stack(int axis, TensorCore... tensors) {
+    System.out.println("Not implemented yet");
+    return null;
   }
 
   // UNARY
@@ -222,32 +252,7 @@ public class TensorCore {
    * @return a new TensorCore containing the results
    */
   public static TensorCore reduce(TensorCore tensor, Reduction operation, int... axes) {
-    return new TensorCore(Reduction.apply(tensor.data, tensor.shape, tensor.strides, axes, operation, true), Utility.getSurvivors(tensor.shape, axes, true));
-  }
-
-  /**
-   * Applies a reduction operation elements specified in the axes of the given tensor with the option to collapse the dimension(s) which
-   * TensorCore preserves by default
-   *
-   * @param TensorCore the input tensor
-   * @param operation the reduction operation to apply
-   * @param axes the axes to apply the reduction operation by
-   * @param keepDims whether to reduce the dimension(s)
-   * @return a new TensorCore containing the results
-   */
-  public TensorCore reduce(Reduction operation, boolean keepDims, int... axes) {return TensorCore.reduce(this, operation, keepDims, axes);}
-  /**
-   * Applies a reduction operation elements specified in the axes of the given tensor with the option to collapse the dimension(s) which
-   * TensorCore preserves by default
-   *
-   * @param TensorCore the input tensor
-   * @param operation the reduction operation to apply
-   * @param axes the axes to apply the reduction operation by
-   * @param keepDims whether to reduce the dimension(s)
-   * @return a new TensorCore containing the results
-   */
-  public static TensorCore reduce(TensorCore tensor, Reduction operation, boolean keepDims, int... axes) {
-    return new TensorCore(Reduction.apply(tensor.data, tensor.shape, tensor.strides, axes, operation, keepDims), Utility.getSurvivors(tensor.shape, axes, keepDims));
+    return new TensorCore(Reduction.apply(tensor.data, tensor.shape, tensor.strides, axes, operation, true), Utility.getSurvivors(tensor.shape, axes));
   }
 
   /**
@@ -290,7 +295,7 @@ public class TensorCore {
    */
   public static TensorCore elementwise(TensorCore a, TensorCore b, Binary operation) {
     if (a.rank != b.rank) {
-      throw new IllegalArgumentException("Mismatching rank for binary elementwise operation. Got Tensors of rank " + a.rank + " and " + b.rank);
+      throw new IllegalArgumentException("Mismatching rank for binary elementwise operation. Got tensors of rank " + a.rank + " and " + b.rank);
     }
     if (!Arrays.equals(a.shape, b.shape)) {
       int[] broadcastShapeTarget = Utility.broadcastedShape(a.shape, b.shape);
@@ -325,9 +330,12 @@ public class TensorCore {
    * @throws IllegalArgumentException if the shapes of the two tensors are mismatched at the contraction axes
    */
   public static TensorCore contract(TensorCore a, TensorCore b, int[] axesA, int[] axesB) {
+    // if (axesA.length > a.rank) throw new IllegalArgumentException("Mismatching axes to contract Tensor A by, attempting to contract along " + axesA.length + " axes when Tensor A has a rank of " + a.rank );
+    // if (axesB.length > b.rank) throw new IllegalArgumentException("Mismatching axes to contract Tensor B by, attempting to contract along " + axesB.length + " axes when Tensor A has a rank of " + b.rank);
+
     for (int i = 0; i < axesA.length; i++) {
       if (a.shape[axesA[i]] != b.shape[axesB[i]]) {
-        throw new IllegalArgumentException("Mismatching dimensions at contraction axes, Tensor a has size " + a.shape[axesA[i]] + " at index " + axesA[i] +  " while Tensor b has size " + b.shape[axesB[i]]  + " at index " + axesB[i]);
+        throw new IllegalArgumentException("Mismatching dimensions at contraction axes, tensor A has size " + a.shape[axesA[i]] + " at index " + axesA[i] +  " while tensor B has size " + b.shape[axesB[i]]  + " at index " + axesB[i]);
       }
     }
 
@@ -350,12 +358,21 @@ public class TensorCore {
   public int[] getStrides() {return this.strides.clone();}
 
   /**
-   * Returns the raw memory buffer of this tensor.
+   * Returns a deep copy of the raw memory buffer of this tensor.
    * 
-   * @return the underlying flat array of this tensor
+   * @return a deep copy of the underlying flat array of this tensor
    */
   public double[] dump() {
     return this.data.clone();
+  }
+
+  /**
+   * Returns the raw memory buffer of this tensor. Unlike .dump(), this does not make a copy and is susceptible to data corruption if managed poorly!
+   * 
+   * @return the underlying flat array of this tensor
+   */
+  public double[] rawData() {
+    return this.data; // unsafe, but whatever
   }
 
   public double get(int... indices) {
@@ -363,7 +380,7 @@ public class TensorCore {
       throw new IllegalArgumentException("Invalid number of indices.");
     }
 
-    return this.data[Utility.getIndex(this.strides, indices)];
+    return this.data[Memory.getIndex(this.strides, indices)];
   }
 
   @Override
@@ -371,8 +388,7 @@ public class TensorCore {
     if (this.data == null || this.shape == null || this.data.length == 0) return "TensorCore[null]";
     
     String prefix = "TensorCore" + Arrays.toString(this.shape) + "(\n";
-    String content = Utility.print(this.data, this.shape, this.strides, 0, 0, 2);
-    String suffix = "";
+    String content = ArrayTools.print(this.data, this.shape, this.strides, 0, 0, 2);
 
     return prefix + content + "\n)";
   }

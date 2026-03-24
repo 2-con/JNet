@@ -4,12 +4,13 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.IntStream;
 
 import tensor.core.Engine;
 import tensor.core.Generator;
 import tensor.core.Traceable;
 import tensor.core.Utility;
-import tensor.ops.Backwards;
 import tensor.ops.Binary;
 import tensor.ops.Reduction;
 import tensor.ops.Unary;
@@ -18,18 +19,18 @@ import tensor.tools.ArrayTools;
 import tensor.tools.Statistics;
 
 public class Tensor implements Traceable{
+  // constants are not capitalized to imitate PyTorch
+  public static boolean verbose = false;
   public final int rank;
   public final int size;
-  public final int[] shape;
-
-  private final TensorCore core;
-  
+  public final int[] shape; // prevents array switching but does not prevent direct modifications
   public boolean requiresGrad;
   public Tensor grad;
-  public static boolean verbose = true;
-
+  
+  private final TensorCore core;
   private List<Tensor> parents = new ArrayList<>();
-  private Backwards derivative;
+  private Consumer<Tensor> derivative;
+  private int[] allAxes;
   
   public Tensor(double[] data, int... shape) {
     this(new TensorCore(data, shape));
@@ -41,6 +42,141 @@ public class Tensor implements Traceable{
     this.shape = core.getShape();
     this.size = core.getSize();
     this.rank = core.getRank();
+    this.allAxes = IntStream.range(0, this.rank + 1).toArray();
+  }
+
+  // ########################################################################################################### //
+  //                                                  UTILITY                                                    //
+  // ########################################################################################################### //
+
+  @Override public List<Tensor> getParents() { return Collections.unmodifiableList(this.parents); }
+  @Override public int[] getShape() { return this.shape.clone(); }
+  @Override public Consumer<Tensor> getGradFunc() { return this.derivative; }
+
+  public Tensor detach() {return detach(this);}
+  public static Tensor detach(Tensor tensor) {
+    Tensor out = new Tensor(tensor.core);
+    out.requiresGrad = false;
+    return out;
+  }
+  
+  public Tensor clone() {return Tensor.clone(this);}
+  public static Tensor clone(Tensor tensor) {
+    return new Tensor(tensor.dump(), tensor.shape);
+  }
+
+  public double[] dump() {
+    return this.core.dump();
+  }
+
+  public Tensor noGrad() {return noGrad(this);}
+  public static Tensor noGrad(Tensor tensor) {
+    tensor.requiresGrad = false;
+    tensor.parents = null;
+    tensor.derivative = null;
+
+    return tensor;
+  }
+
+  public double get(int... indices) {
+    return this.core.get(indices);
+  }
+
+  @Override
+  public String toString() {
+    if (this.core.dump() == null || this.shape == null || this.core.dump().length == 0) return "Tensor[null]";
+
+    String prefix = "Tensor" + Arrays.toString(this.shape) + "(\n";
+    String content = ArrayTools.print(this.core.dump(), this.shape, this.core.getStrides(), 0, 0, 2);
+    String suffix = " grad=" + this.requiresGrad;
+
+    if (verbose) {
+      return prefix + content + "\n\n" + suffix + "\n)";
+    } else {
+      return prefix + content + "\n)";
+    }
+  }
+
+  private void addInPlace(TensorCore other) {
+    if (this.dump().length != other.dump().length) {
+      throw new IllegalArgumentException("Internal data size mismatch for in-place add.");
+    }
+    // Perform raw array addition without creating a new result array
+    for (int i = 0; i < this.dump().length; i++) {
+      this.core.rawData()[i] += other.rawData()[i];
+    }
+  }
+
+  // ########################################################################################################### //
+  //                                              AUTOGRAD LOGIC                                                 //
+  // ########################################################################################################### //
+
+  public void zeroGrad() {Tensor.zeroGrad(this);}
+  public static void zeroGrad(Tensor tensor) {
+    List<Tensor> nodes = buildGraph(tensor);
+    for (Tensor node : nodes) {
+      if (node.grad != null) {
+        java.util.Arrays.fill(node.grad.core.rawData(), 0.0);
+      }
+    }
+  }
+
+  public void accumulate(Tensor incomingGrad) {
+    if (!this.requiresGrad) return;
+    
+    if (this.grad == null) {
+      // initialize with zeros of the same shape as the data
+      this.grad = Tensor.zerosLike(this);
+    }
+
+    this.grad.addInPlace(incomingGrad.core);
+  }
+
+  public static List<Tensor> buildGraph(Tensor root) {
+    List<Tensor> order = new ArrayList<>();
+    Set<Tensor> visited = new HashSet<>();
+    
+    visit(root, visited, order);
+    
+    // reverse the order because we want to go from out --> in
+    Collections.reverse(order);
+    return order;
+  }
+
+  private static void visit(Tensor node, Set<Tensor> visited, List<Tensor> order) {
+    if (node == null || visited.contains(node)) return;
+    
+    visited.add(node);
+    if (node.parents != null) {
+      for (Tensor parent : node.parents) {
+        visit(parent, visited, order);
+      }
+    }
+    order.add(node);
+  }
+
+  public void backward() {
+    if (!this.requiresGrad) {
+      throw new IllegalStateException(".backward() cannot be called on a tensor that does not require gradients");
+    } 
+
+    if (this.parents == null && this.derivative == null) {
+      throw new IllegalStateException("This tensor is the result of a non-differentiable operation");
+    }
+
+    if (this.grad == null) {
+      this.grad = Tensor.onesLike(this);
+    } else {
+      java.util.Arrays.fill(this.grad.core.rawData(), 1.0);
+    }
+
+    List<Tensor> order = buildGraph(this);
+
+    for (Tensor node : order) {
+      if (node.derivative != null && node.grad != null) {
+        node.derivative.accept(node.grad);
+      }
+    }
   }
   
   // ########################################################################################################### //
@@ -131,8 +267,22 @@ public class Tensor implements Traceable{
     return out;
   }
 
-  public static Tensor reshape(Tensor tensor, int... axes) {
-    Tensor out = new Tensor(TensorCore.reshape(tensor.core, axes));
+  public static Tensor reshape(Tensor tensor, int... shape) {
+    int countNegatives = 0;
+    for (int n : shape) {
+      if (n < -1) {
+        throw new IllegalArgumentException("Dimension inference only works on -1, got " + n + " instead");
+      }
+      if (n == -1) {
+        countNegatives++;
+      }
+      if (countNegatives > 1) {
+        throw new IllegalArgumentException("Only one dimension can be inferred, got " + countNegatives + " dimensions to infer");
+      }
+    }
+
+    int[] newShape = Utility.inferShape(tensor.shape, shape);
+    Tensor out = new Tensor(TensorCore.reshape(tensor.core, newShape));
     out.requiresGrad = tensor.requiresGrad;
 
     if (out.requiresGrad) {
@@ -179,11 +329,23 @@ public class Tensor implements Traceable{
     return out;
   }
 
+  // TODO: actually impliment this
+  public static Tensor concat(int axis, Tensor... tensors) {
+    System.out.println("Not implemented yet");
+    return null;
+  }
+
+  // TODO: actually impliment this
+  public static Tensor stack(int axis, Tensor... tensors) {
+    System.out.println("Not implemented yet");
+    return null;
+  }
+
   // UNARY
 
   /**
-   * Applies a reduction operation elements specified in the axes of the given tensor. By default, the output tensor cannot automatically compute gradients
-   * for this arbitrary reduction operation. reduce() defaults to preserving the dimension(s).
+   * Applies a reduction operation elements specified in the axes of the given tensor. By default, the output tensor cannot call autograd to compute gradients
+   * for any arbitrary reduction operation.
    * 
    * @param tensor the input tensor
    * @param operation the reduction operation to apply
@@ -191,21 +353,7 @@ public class Tensor implements Traceable{
    * @return a new Tensor containing the results with gradients set to false
    */
   public static Tensor reduce(Tensor tensor, Reduction operation, int... axes) {
-    return new Tensor(TensorCore.reduce(tensor.core, operation, true, axes)).noGrad();
-  }
-
-  /**
-   * Applies a reduction operation elements specified in the axes of the given tensor. By default, the output tensor cannot automatically compute gradients
-   * for this arbitrary reduction operation. The option to collapse the dimension(s) which Tensor preserves by default.
-   * 
-   * @param tensor the input tensor
-   * @param operation the reduction operation to apply
-   * @param axes the axes to apply the reduction operation by
-   * @param keepDims whether to reduce the dimension(s)
-   * @return a new Tensor containing the results with gradients set to false
-   */
-  public static Tensor reduce(Tensor tensor, Reduction operation, boolean keepDims, int... axes) {
-    return new Tensor(TensorCore.reduce(tensor.core, operation, keepDims, axes)).noGrad();
+    return new Tensor(TensorCore.reduce(tensor.core, operation, axes)).noGrad();
   }
 
   /**
@@ -248,7 +396,7 @@ public class Tensor implements Traceable{
    */
   public static Tensor elementwise(Tensor tensorA, Tensor tensorB, Binary op, Binary dA, Binary dB) {
     if (tensorA.rank != tensorB.rank) {
-      throw new IllegalArgumentException("Mismatching rank for binary elementwise operation. Got Tensors of rank " + tensorA.rank + " and " + tensorB.rank);
+      throw new IllegalArgumentException("Mismatching rank for binary elementwise operation. Got tensors of rank " + tensorA.rank + " and " + tensorB.rank);
     }
 
     int[] broadcastShapeTarget = Utility.broadcastedShape(tensorA.shape, tensorB.shape);
@@ -321,21 +469,41 @@ public class Tensor implements Traceable{
 
     return out;
   }
+
+  // TODO: implement all of theese
+  public static Tensor crossCorrelation(Tensor tensor) {
+    System.out.println("Not implimented yet");
+    return null;
+  }
+
+  public static Tensor convolution(Tensor tensor) {
+    System.out.println("Not implimented yet");
+    return null;
+  }
+
+  public static Tensor transposedCrossCorrelation(Tensor tensor) {
+    System.out.println("Not implimented yet");
+    return null;
+  }
+
+  public static Tensor transposedConvolution(Tensor tensor) {
+    System.out.println("Not implimented yet");
+    return null;
+  }
   
   // ########################################################################################################### //
   //                                                EXTRA METHODS                                                //
   // ########################################################################################################### //
   
-  // REDUCTION
+  // REDUCTION ##########################################################
 
   public Tensor sum(int... axes) {return sum(this, axes);}
   public static Tensor sum(Tensor tensor, int... axes) {
-    Tensor out = new Tensor(TensorCore.reduce(tensor.core, ArrayTools::sum, axes));
+    Tensor out = new Tensor(TensorCore.reduce(tensor.core, Statistics::sum, axes));
     out.requiresGrad = tensor.requiresGrad;
 
     if (out.requiresGrad) {
       Tensor input = tensor;
-
       out.parents = List.of(input);
 
       out.derivative = (grad) -> {
@@ -347,9 +515,10 @@ public class Tensor implements Traceable{
     return out;
   }
 
+  // FIXME: prod is wrong: 1 zero = all grads go here, 2+ zeros = no grad. currently if there are any zeros, NaNs will happen bc 1/0
   public Tensor prod(int... axes) {return prod(this, axes);}
   public static Tensor prod(Tensor tensor, int... axes) {
-    Tensor out = new Tensor(TensorCore.reduce(tensor.core, ArrayTools::prod, axes));
+    Tensor out = new Tensor(TensorCore.reduce(tensor.core, Statistics::prod, axes));
 
     out.requiresGrad = tensor.requiresGrad;
 
@@ -360,7 +529,7 @@ public class Tensor implements Traceable{
         double[] gradExpanded = Engine.transformData(grad.dump(), grad.shape, tensor.shape);
         double[] yExpanded = Engine.transformData(out.core.dump(), out.shape, tensor.shape);
 
-        double[] xData = tensor.core.dump();
+        double[] xData = tensor.dump();
         double[] gradInput = new double[tensor.size];
 
         for (int i = 0; i < gradInput.length; i++) {
@@ -374,7 +543,7 @@ public class Tensor implements Traceable{
     return out;
   }
 
-  // note: min and max grads are still wrong: they both assume its global when its not guarenteed
+  // FIXME:  min and max grads are still wrong: they both assume global reduction when its not guaranteed
   public Tensor max(int... axes) {return max(this, axes);}
   public static Tensor max(Tensor tensor, int... axes) {
     Tensor out = new Tensor(TensorCore.reduce(tensor.core, Statistics::max, axes));
@@ -388,7 +557,7 @@ public class Tensor implements Traceable{
         double[] gradExpanded = Engine.transformData(grad.dump(), grad.shape, tensor.shape);
         double[] yExpanded = Engine.transformData(out.core.dump(), out.shape, tensor.shape);
 
-        double[] xData = tensor.core.dump();
+        double[] xData = tensor.dump();
         double[] gradInput = new double[tensor.size];
 
         int count = 0;
@@ -415,7 +584,7 @@ public class Tensor implements Traceable{
         double[] gradExpanded = Engine.transformData(grad.dump(), grad.shape, tensor.shape);
         double[] yExpanded = Engine.transformData(out.core.dump(), out.shape, tensor.shape);
 
-        double[] xData = tensor.core.dump();
+        double[] xData = tensor.dump();
         double[] gradInput = new double[tensor.size];
 
         int count = 0;
@@ -434,7 +603,7 @@ public class Tensor implements Traceable{
   public Tensor mean(int... axes) {return mean(this, axes);}
   public static Tensor mean(Tensor tensor, int... axes) {
     Tensor sum = sum(tensor, axes);
-    int reductionSize = Utility.sizeOf(Utility.getSubShape(tensor.shape, axes));
+    int reductionSize = Statistics.prod(Utility.getSubShape(tensor.shape, axes));
 
     return mul(sum, 1.0 / reductionSize);
   }
@@ -476,7 +645,7 @@ public class Tensor implements Traceable{
     return div(m4, pow(stdev, 4));
   }
 
-  // non-differentiables
+  // non-differentiable
 
   public Tensor range(int... axes) {return range(this, axes);}
   public static Tensor range(Tensor tensor, int... axes) {
@@ -532,7 +701,7 @@ public class Tensor implements Traceable{
     return new Tensor(TensorCore.reduce(tensor.core, Statistics::iqr, axes)).noGrad();
   }
 
-  // UNARY
+  // UNARY ##########################################################
 
   public static Tensor add(Tensor tensor, double scalar) {
     return Tensor.apply(tensor, (a) -> a + scalar, (a) -> 1.0);
@@ -546,7 +715,7 @@ public class Tensor implements Traceable{
     return Tensor.apply(tensor, (a) -> Math.pow(a, scalar), (a) -> scalar * Math.pow(a, scalar - 1.0));
   }
 
-  // BINARY
+  // BINARY ##########################################################
 
   public static Tensor add(Tensor tensorA, Tensor tensorB) {
     return Tensor.elementwise(tensorA, tensorB, (x, y) -> x + y, (x, y) -> 1.0, (x, y) -> 1.0);
@@ -568,150 +737,40 @@ public class Tensor implements Traceable{
     return Tensor.elementwise(tensorA, tensorB, (x, y) -> Math.pow(x, y), (x, y) -> y * Math.pow(x, y - 1), (x, y) -> Math.pow(x, y) * Math.log(x));
   }
 
-  // function
+  // FUNCTION ##########################################################
+
+  // scalers
 
   public static Tensor rescaleStandard(Tensor tensor){
-    double mean = Statistics.mean(tensor.core.dump());
-    double stdDev = Statistics.stdev(tensor.core.dump());
+    Tensor mean = Tensor.mean(tensor, tensor.allAxes);
+    Tensor stdev = Tensor.stdev(tensor, tensor.allAxes);
 
-    return apply(tensor, n -> (n - mean) / stdDev, n -> 1.0 / stdDev);
+    return Tensor.div(Tensor.sub(tensor, mean), stdev);
   }
 
   public static Tensor rescaleMinMax(Tensor tensor){
-    double max = Statistics.max(tensor.core.dump());
-    double min = Statistics.min(tensor.core.dump());
+    Tensor max = Tensor.max(tensor, tensor.allAxes);
+    Tensor min = Tensor.min(tensor, tensor.allAxes);
 
-    return apply(tensor, n -> (n - min) / (max - min), n -> 1.0 / (max - min));
+    return Tensor.div(Tensor.sub(tensor, min), Tensor.sub(max, min));
   }
   
   public static Tensor rescaleRobust(Tensor tensor){
-    double median = Statistics.median(tensor.core.dump());
-    double iqr = Statistics.iqr(tensor.core.dump());
-    
-    return apply(tensor, n -> (n - median) / iqr, n -> 1.0 / iqr);
+    Tensor median = Tensor.median(tensor, tensor.allAxes);
+    Tensor iqr = Tensor.iqr(tensor, tensor.allAxes);
+
+    return Tensor.div(Tensor.sub(tensor, median), iqr);
   }
   
   public static Tensor rescaleMaxAbs(Tensor tensor){
-    double maxAbs = Statistics.max(ArrayTools.foreach(tensor.core.dump(), n -> Math.abs(n)));
+    Tensor maxAbs = Tensor.max(Tensor.apply(tensor, (n) -> Math.abs(n), (n) -> (n > 0) ? 1.0 : -1.0));
     
-    return apply(tensor, n -> n / maxAbs, n -> 1.0 / maxAbs);
+    return Tensor.div(tensor, maxAbs);
   }
 
-  // ########################################################################################################### //
-  //                                                  UTILITY                                                    //
-  // ########################################################################################################### //
+  // differentiable
+  
 
-  @Override public List<Tensor> getParents() { return Collections.unmodifiableList(this.parents); }
-  @Override public int[] getShape() { return this.shape.clone(); }
-  @Override public Backwards getGradFunc() { return this.derivative; }
-    
-  /**
-   * Returns a flat double array containing the elements of this tensor in row-major order.
-   * 
-   * @return a flat array containing the elements of this tensor
-   */
-  public double[] dump() {
-    return this.core.dump();
-  }
-
-  /**
-   * Disables gradient computation for this tensor. Cannot be undone and changes the instance itself
-   * 
-   * @return the same tensor
-   */
-  public Tensor noGrad() {return noGrad(this);}
-
-  /**
-   * Disables gradient computation for a given tensor. Cannot be undone and changes the instance itself
-   * 
-   * @param tensor the tensor to disable gradient computation for
-   * @return the same tensor
-   */
-  public static Tensor noGrad(Tensor tensor) {
-    tensor.requiresGrad = false;
-    tensor.parents = null;
-    tensor.derivative = null;
-
-    return tensor;
-  }
-
-  public double get(int... indices) {
-    return this.core.get(indices);
-  }
-
-  @Override
-  public String toString() {
-    if (this.core.dump() == null || this.shape == null || this.core.dump().length == 0) return "Tensor[null]";
-
-    String prefix = "Tensor" + Arrays.toString(this.shape) + "(\n";
-    String content = Utility.print(this.core.dump(), this.shape, this.core.getStrides(), 0, 0, 2);
-    String suffix = " grad=" + this.requiresGrad;
-
-    if (verbose) {
-      return prefix + content + "\n\n" + suffix + "\n)";
-    } else {
-      return prefix + content + "\n)";
-    }
-  }
-
-  // ########################################################################################################### //
-  //                                              AUTOGRAD LOGIC                                                 //
-  // ########################################################################################################### //
-
-  public void accumulate(Tensor incomingGrad) {
-    if (!this.requiresGrad) return;
-    
-    if (this.grad == null) {
-      // Initialize with zeros of the same shape as the data
-      this.grad = Tensor.zerosLike(this);
-    }
-    // Use your Backend's combine method to add the gradients
-    this.grad = new Tensor(TensorCore.elementwise(this.grad.core, incomingGrad.core, (a, b) -> a + b));
-  }
-
-  public static List<Tensor> buildGraph(Tensor root) {
-    List<Tensor> order = new ArrayList<>();
-    Set<Tensor> visited = new HashSet<>();
-    
-    // Internal recursive helper
-    visit(root, visited, order);
-    
-    // Reverse the order because we want to go from Output -> Input
-    Collections.reverse(order);
-    return order;
-  }
-
-  private static void visit(Tensor node, Set<Tensor> visited, List<Tensor> order) {
-    if (node == null || visited.contains(node)) return;
-    
-    visited.add(node);
-    if (node.parents != null) {
-      for (Tensor parent : node.parents) {
-        visit(parent, visited, order);
-      }
-    }
-    order.add(node);
-  }
-
-  public void backward() {
-    if (!this.requiresGrad) {
-      throw new IllegalStateException("Called backward on a tensor that doesn't require gradients.");
-    } 
-
-    if (this.parents == null && this.derivative == null) {
-      throw new IllegalStateException(
-        "This tensor is the result of a non-differentiable operation."
-      );
-    }
-
-    this.grad = Tensor.onesLike(this);
-
-    List<Tensor> order = buildGraph(this);
-
-    for (Tensor node : order) {
-      if (node.derivative != null) {
-        node.derivative.apply(node.grad);
-      }
-    }
-  }
+  // non-differentiable
+  
 }

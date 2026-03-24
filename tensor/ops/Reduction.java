@@ -1,27 +1,29 @@
 package tensor.ops;
+import tensor.core.Memory;
 import tensor.core.Utility;
+import tensor.tools.Statistics;
 
 @FunctionalInterface
 public interface Reduction {
   double reduce(double[] accumulator);
   
   public static double[] apply(double[] data, int[] shape, int[] strides, int[] axes, Reduction operation, boolean keepDims) {
-    int[] resShape = Utility.getSurvivors(shape, axes, keepDims);
-    double[] resData = new double[Utility.sizeOf(resShape)];
+    int[] resShape = Utility.getSurvivors(shape, axes);
+    double[] resData = new double[Statistics.prod(resShape)];
     
     int[] subShape = Utility.getSubShape(shape, axes); // size of one slice
-    int reductionVolume = Utility.sizeOf(subShape);
+    int reductionVolume = Statistics.prod(subShape);
     
     int[] resCoords = new int[resShape.length];
     int resIdx = 0;
     
-    double[] subShapeData = new double[Utility.sizeOf(subShape)];
+    double[] subShapeData = new double[Statistics.prod(subShape)];
 
     if (resShape.length == 0) {
       for (int k = 0; k < reductionVolume; k++) {
           int[] kCoords = Utility.unravel(k, subShape);
-          // Use mapToOffset even for scalars to account for strides/offsets
-          int offset = Utility.mapToOffset(new int[0], kCoords, axes, shape, strides, true, keepDims);
+          // use mapToOffset even for scalars to account for strides/offsets
+          int offset = Memory.mapToOffset(new int[0], kCoords, axes, shape, strides, true);
           subShapeData[k] = data[offset];
       }
       return new double[]{ operation.reduce(subShapeData) };
@@ -32,14 +34,14 @@ public interface Reduction {
         int[] kCoords = Utility.unravel(k, subShape); // get the sliced indices of the kth element
 
         // map coords to offset coors suitable for the 1d data
-        int offset = Utility.mapToOffset(resCoords, kCoords, axes, shape, strides, true, keepDims);
+        int offset = Memory.mapToOffset(resCoords, kCoords, axes, shape, strides, true);
         subShapeData[k] = data[offset];
       }
 
       double ans = operation.reduce(subShapeData);
 
       resData[resIdx++] = ans;
-    } while (Utility.nextCoordinate(resCoords, resShape));
+    } while (Memory.nextCoordinate(resCoords, resShape));
 
     return resData;
   }

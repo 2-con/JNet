@@ -2,12 +2,12 @@ package tensor.tools;
 
 import java.util.Arrays;
 import tensor.TensorCore;
+import tensor.core.Memory;
 import tensor.core.Traceable;
-import tensor.core.Utility;
 
 public class Debug {
   public static void print(double[] array, int[] shape) {
-    System.out.println(Utility.print(array, shape, Utility.calculateStrides(shape), 0, 0));
+    System.out.println(ArrayTools.print(array, shape, Memory.calculateStrides(shape), 0, 0, 0));
   }
 
   public static void print(Traceable tensor) {
