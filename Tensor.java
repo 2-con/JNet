@@ -1,4 +1,5 @@
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -6,6 +7,8 @@ import java.util.Set;
 
 import tensor.core.Engine;
 import tensor.core.Generator;
+import tensor.core.Traceable;
+import tensor.core.Utility;
 import tensor.ops.Backwards;
 import tensor.ops.Binary;
 import tensor.ops.Reduction;
@@ -14,17 +17,19 @@ import tensor.TensorCore;
 import tensor.tools.ArrayTools;
 import tensor.tools.Statistics;
 
-public class Tensor {
-  public boolean requiresGrad;
-  public Tensor grad; 
+public class Tensor implements Traceable{
   public final int rank;
   public final int size;
-  
-  private List<Tensor> parents = new ArrayList<>();
-  private Backwards gradFunc;
-  
+  public final int[] shape;
+
   private final TensorCore core;
-  private final int[] shape;
+  
+  public boolean requiresGrad;
+  public Tensor grad;
+  public static boolean verbose = true;
+
+  private List<Tensor> parents = new ArrayList<>();
+  private Backwards derivative;
   
   public Tensor(double[] data, int... shape) {
     this(new TensorCore(data, shape));
@@ -32,7 +37,7 @@ public class Tensor {
 
   public Tensor(TensorCore core) {
     this.core = core;
-    this.requiresGrad = true;
+    this.requiresGrad = false;
     this.shape = core.getShape();
     this.size = core.getSize();
     this.rank = core.getRank();
@@ -105,27 +110,69 @@ public class Tensor {
   // SPECIALS
 
   public static Tensor permute(Tensor tensor, int... axes) {
-    TensorCore resultCore = TensorCore.permute(tensor.core, axes);
-    Tensor out = new Tensor(resultCore);
-
+    Tensor out = new Tensor(TensorCore.permute(tensor.core, axes));
     out.requiresGrad = tensor.requiresGrad;
 
     if (out.requiresGrad) {
-      Tensor input = tensor;
       int[] inverse = new int[axes.length];
 
       for (int i = 0; i < axes.length; i++) {
         inverse[axes[i]] = i;
       }
 
-      out.parents = List.of(input);
+      out.parents = List.of(tensor);
 
-      out.gradFunc = (gradOutput) -> {
+      out.derivative = (grad) -> {
+        TensorCore gradInputCore = TensorCore.permute(grad.core, inverse);
+        tensor.accumulate(new Tensor(gradInputCore));
+      };
+    }
 
-          TensorCore gradInputCore =
-              TensorCore.permute(gradOutput.core, inverse);
+    return out;
+  }
 
-          input.accumulate(new Tensor(gradInputCore));
+  public static Tensor reshape(Tensor tensor, int... axes) {
+    Tensor out = new Tensor(TensorCore.reshape(tensor.core, axes));
+    out.requiresGrad = tensor.requiresGrad;
+
+    if (out.requiresGrad) {
+      out.parents = List.of(tensor);
+
+      out.derivative = (grad) -> {
+        TensorCore gradInputCore = TensorCore.reshape(grad.core, tensor.shape);
+        tensor.accumulate(new Tensor(gradInputCore));
+      };
+    }
+
+    return out;
+  }
+
+  public static Tensor squeeze(Tensor tensor) {
+    Tensor out = new Tensor(TensorCore.squeeze(tensor.core));
+    out.requiresGrad = tensor.requiresGrad;
+
+    if (out.requiresGrad) {
+      out.parents = List.of(tensor);
+      
+      out.derivative = (grad) -> {
+        TensorCore reshaped = TensorCore.reshape(grad.core, tensor.shape);
+        tensor.accumulate(new Tensor(reshaped));
+      };
+    }
+    
+    return out;
+  }
+  
+  public static Tensor unsqueeze(Tensor tensor) {
+    Tensor out = new Tensor(TensorCore.unsqueeze(tensor.core));
+    out.requiresGrad = tensor.requiresGrad;
+    
+    if (out.requiresGrad) {
+      out.parents = List.of(tensor);
+
+      out.derivative = (grad) -> {
+        TensorCore reshaped = TensorCore.reshape(grad.core, tensor.shape);
+        tensor.accumulate(new Tensor(reshaped));
       };
     }
 
@@ -136,7 +183,7 @@ public class Tensor {
 
   /**
    * Applies a reduction operation elements specified in the axes of the given tensor. By default, the output tensor cannot automatically compute gradients
-   * for this arbitrary reduction operation.
+   * for this arbitrary reduction operation. reduce() defaults to preserving the dimension(s).
    * 
    * @param tensor the input tensor
    * @param operation the reduction operation to apply
@@ -144,12 +191,21 @@ public class Tensor {
    * @return a new Tensor containing the results with gradients set to false
    */
   public static Tensor reduce(Tensor tensor, Reduction operation, int... axes) {
-    TensorCore resultCore = TensorCore.reduce(tensor.core, operation, axes);
-    Tensor out = new Tensor(resultCore);
+    return new Tensor(TensorCore.reduce(tensor.core, operation, true, axes)).noGrad();
+  }
 
-    out.requiresGrad = false;
-
-    return out;
+  /**
+   * Applies a reduction operation elements specified in the axes of the given tensor. By default, the output tensor cannot automatically compute gradients
+   * for this arbitrary reduction operation. The option to collapse the dimension(s) which Tensor preserves by default.
+   * 
+   * @param tensor the input tensor
+   * @param operation the reduction operation to apply
+   * @param axes the axes to apply the reduction operation by
+   * @param keepDims whether to reduce the dimension(s)
+   * @return a new Tensor containing the results with gradients set to false
+   */
+  public static Tensor reduce(Tensor tensor, Reduction operation, boolean keepDims, int... axes) {
+    return new Tensor(TensorCore.reduce(tensor.core, operation, keepDims, axes)).noGrad();
   }
 
   /**
@@ -161,19 +217,17 @@ public class Tensor {
    * @return a new Tensor containing the result of applying the operation to each element of the input tensor
    */
   public static Tensor apply(Tensor tensor, Unary operation, Unary derivative) {
-    TensorCore resultCore = TensorCore.apply(tensor.core, operation);
-    Tensor out = new Tensor(resultCore);
+    Tensor out = new Tensor(TensorCore.apply(tensor.core, operation));
 
     out.requiresGrad = tensor.requiresGrad;
 
     if (out.requiresGrad) {
-      Tensor input = tensor;
-      out.parents = List.of(input);
+      out.parents = List.of(tensor);
 
-      out.gradFunc = (gradOutput) -> {
-        TensorCore derivativeCore = TensorCore.apply(input.core, derivative);
-        TensorCore gradInputCore = TensorCore.combine(gradOutput.core, derivativeCore, (a, b) -> a * b);
-        input.accumulate(new Tensor(gradInputCore));
+      out.derivative = (grad) -> {
+        TensorCore derivativeCore = TensorCore.apply(tensor.core, derivative);
+        TensorCore gradInputCore = TensorCore.elementwise(grad.core, derivativeCore, (a, b) -> a * b);
+        tensor.accumulate(new Tensor(gradInputCore));
       };
     }
 
@@ -192,26 +246,40 @@ public class Tensor {
    * @param dB the derivative of the operation with respect to the second input (Tensor b)
    * @return a new Tensor containing the result of applying the operation to each element of the input tensors
    */
-  public static Tensor combine(Tensor a, Tensor b, Binary op, Binary dA, Binary dB) {
-    TensorCore resultCore = TensorCore.combine(a.core, b.core, op);
-    Tensor out = new Tensor(resultCore);
+  public static Tensor elementwise(Tensor tensorA, Tensor tensorB, Binary op, Binary dA, Binary dB) {
+    if (tensorA.rank != tensorB.rank) {
+      throw new IllegalArgumentException("Mismatching rank for binary elementwise operation. Got Tensors of rank " + tensorA.rank + " and " + tensorB.rank);
+    }
 
-    out.requiresGrad = a.requiresGrad || b.requiresGrad;
+    int[] broadcastShapeTarget = Utility.broadcastedShape(tensorA.shape, tensorB.shape);
+
+    TensorCore coreA = tensorA.core.broadcast(broadcastShapeTarget);
+    TensorCore coreB = tensorB.core.broadcast(broadcastShapeTarget);
+  
+    Tensor out = new Tensor(TensorCore.elementwise(coreA, coreB, op));
+
+    out.requiresGrad = tensorA.requiresGrad || tensorB.requiresGrad;
 
     if (out.requiresGrad) {
-      out.parents = List.of(a, b);
+      out.parents = List.of(tensorA, tensorB);
 
-      out.gradFunc = (gradOutput) -> {
-        if (a.requiresGrad) {
-          TensorCore dACore = TensorCore.combine(a.core, b.core, dA);
-          TensorCore gradA  = TensorCore.combine(gradOutput.core, dACore, (x, y) -> x * y);
-          a.accumulate(new Tensor(gradA));
+      out.derivative = (grad) -> {
+        if (tensorA.requiresGrad) {
+          TensorCore dACore = TensorCore.elementwise(coreA, coreB, dA);
+          TensorCore gradA  = TensorCore.elementwise(grad.core, dACore, (x, y) -> x * y);
+          
+          // CRITICAL: If tensorA was smaller than the output, sum the gradient back
+          double[] reducedData = Engine.reduceSum(gradA.dump(), broadcastShapeTarget, tensorA.shape);
+          tensorA.accumulate(new Tensor(reducedData, tensorA.shape));
         }
 
-        if (b.requiresGrad) {
-          TensorCore dBCore = TensorCore.combine(a.core, b.core, dB);
-          TensorCore gradB  = TensorCore.combine(gradOutput.core, dBCore, (x, y) -> x * y);
-          b.accumulate(new Tensor(gradB));
+        if (tensorB.requiresGrad) {
+          TensorCore dBCore = TensorCore.elementwise(coreA, coreB, dB);
+          TensorCore gradB  = TensorCore.elementwise(grad.core, dBCore, (x, y) -> x * y);
+          
+          // CRITICAL: If tensorB was smaller, sum back to original shape
+          double[] reducedData = Engine.reduceSum(gradB.dump(), broadcastShapeTarget, tensorB.shape);
+          tensorB.accumulate(new Tensor(reducedData, tensorB.shape));
         }
       };
     }
@@ -228,27 +296,25 @@ public class Tensor {
    * @param axesB the axes of the second tensor to contract along
    * @return a new Tensor containing the result of contracting the two input tensors along the specified axes
    */
-  public static Tensor contract(Tensor a, Tensor b, int[] axesA, int[] axesB) {
-    TensorCore resultCore = TensorCore.contract(a.core, b.core, axesA, axesB);
-
-    Tensor out = new Tensor(resultCore);
-    out.requiresGrad = a.requiresGrad || b.requiresGrad;
+  public static Tensor contract(Tensor tensorA, Tensor tensorB, int[] axesA, int[] axesB) {
+    Tensor out = new Tensor(TensorCore.contract(tensorA.core, tensorB.core, axesA, axesB));
+    out.requiresGrad = tensorA.requiresGrad || tensorB.requiresGrad;
 
     if (out.requiresGrad) {
-      out.parents = List.of(a, b);
+      out.parents = List.of(tensorA, tensorB);
 
       // returns the grad axes of A and B
-      int[][] survivors = Engine.getResultAxes(a.shape, b.shape, axesA, axesB);
+      int[][] survivors = Utility.getResultAxes(tensorA.shape, tensorB.shape, axesA, axesB);
 
-      out.gradFunc = (gradOutput) -> {
-        if (a.requiresGrad) {
-          TensorCore gradACore = TensorCore.contract(gradOutput.core, b.core, survivors[1], axesB);
-          a.accumulate(new Tensor(gradACore));
+      out.derivative = (grad) -> {
+        if (tensorA.requiresGrad) {
+          TensorCore gradACore = TensorCore.contract(grad.core, tensorB.core, survivors[1], axesB);
+          tensorA.accumulate(new Tensor(gradACore));
         }
 
-        if (b.requiresGrad) {
-          TensorCore gradBCore = TensorCore.contract(a.core, gradOutput.core, axesA, survivors[0]);
-          b.accumulate(new Tensor(gradBCore));
+        if (tensorB.requiresGrad) {
+          TensorCore gradBCore = TensorCore.contract(tensorA.core, grad.core, axesA, survivors[0]);
+          tensorB.accumulate(new Tensor(gradBCore));
         }
       };
     }
@@ -272,8 +338,8 @@ public class Tensor {
 
       out.parents = List.of(input);
 
-      out.gradFunc = (gradOutput) -> {
-        double[] gradInput = Engine.broadcastGrad(gradOutput.flatten(), gradOutput.shape, input.shape, axes);
+      out.derivative = (grad) -> {
+        double[] gradInput = Engine.transformData(grad.dump(), grad.shape, input.shape);
         input.accumulate(new Tensor(gradInput, input.shape));
       };
     }
@@ -290,11 +356,11 @@ public class Tensor {
     if (out.requiresGrad) {
       out.parents = List.of(tensor);
 
-      out.gradFunc = (gradOutput) -> {
-        double[] gradExpanded = Engine.broadcastGrad(gradOutput.flatten(), gradOutput.shape, tensor.shape, axes);
-        double[] yExpanded = Engine.broadcastGrad(out.flatten(), out.shape, tensor.shape, axes);
+      out.derivative = (grad) -> {
+        double[] gradExpanded = Engine.transformData(grad.dump(), grad.shape, tensor.shape);
+        double[] yExpanded = Engine.transformData(out.core.dump(), out.shape, tensor.shape);
 
-        double[] xData = tensor.flatten();
+        double[] xData = tensor.core.dump();
         double[] gradInput = new double[tensor.size];
 
         for (int i = 0; i < gradInput.length; i++) {
@@ -308,6 +374,7 @@ public class Tensor {
     return out;
   }
 
+  // note: min and max grads are still wrong: they both assume its global when its not guarenteed
   public Tensor max(int... axes) {return max(this, axes);}
   public static Tensor max(Tensor tensor, int... axes) {
     Tensor out = new Tensor(TensorCore.reduce(tensor.core, Statistics::max, axes));
@@ -317,19 +384,16 @@ public class Tensor {
     if (out.requiresGrad) {
       out.parents = List.of(tensor);
 
-      out.gradFunc = (gradOutput) -> {
-        double[] gradExpanded = Engine.broadcastGrad(gradOutput.flatten(), gradOutput.shape, tensor.shape, axes);
-        double[] yExpanded = Engine.broadcastGrad(out.flatten(), out.shape, tensor.shape, axes);
+      out.derivative = (grad) -> {
+        double[] gradExpanded = Engine.transformData(grad.dump(), grad.shape, tensor.shape);
+        double[] yExpanded = Engine.transformData(out.core.dump(), out.shape, tensor.shape);
 
-        double[] xData = tensor.flatten();
+        double[] xData = tensor.core.dump();
         double[] gradInput = new double[tensor.size];
 
-        // get the index of the max to submit all the gradients to
-        for (int i = 0; i < gradInput.length; i++) {
-          if (xData[i] == yExpanded[i]) {
-            gradInput[i] = gradExpanded[i];
-          }
-        }
+        int count = 0;
+        for (double n: xData) count += (n == yExpanded[0]) ? 1 : 0;
+        for (int i = 0; i < gradInput.length; i++) gradInput[i] = (xData[i] == yExpanded[i]) ? gradExpanded[i] / count : 0;
 
         tensor.accumulate(new Tensor(gradInput, tensor.shape));
       };
@@ -347,19 +411,16 @@ public class Tensor {
     if (out.requiresGrad) {
       out.parents = List.of(tensor);
 
-      out.gradFunc = (gradOutput) -> {
-        double[] gradExpanded = Engine.broadcastGrad(gradOutput.flatten(), gradOutput.shape, tensor.shape, axes);
-        double[] yExpanded = Engine.broadcastGrad(out.flatten(), out.shape, tensor.shape, axes);
+      out.derivative = (grad) -> {
+        double[] gradExpanded = Engine.transformData(grad.dump(), grad.shape, tensor.shape);
+        double[] yExpanded = Engine.transformData(out.core.dump(), out.shape, tensor.shape);
 
-        double[] xData = tensor.flatten();
+        double[] xData = tensor.core.dump();
         double[] gradInput = new double[tensor.size];
 
-        // get the index of the max to submit all the gradients to
-        for (int i = 0; i < gradInput.length; i++) {
-          if (xData[i] == yExpanded[i]) {
-            gradInput[i] = gradExpanded[i];
-          }
-        }
+        int count = 0;
+        for (double n: xData) count += (n == yExpanded[0]) ? 1 : 0;
+        for (int i = 0; i < gradInput.length; i++) gradInput[i] = (xData[i] == yExpanded[i]) ? gradExpanded[i] / count : 0;
 
         tensor.accumulate(new Tensor(gradInput, tensor.shape));
       };
@@ -368,10 +429,12 @@ public class Tensor {
     return out;
   }
 
+  // non-atomic reductions
+
   public Tensor mean(int... axes) {return mean(this, axes);}
   public static Tensor mean(Tensor tensor, int... axes) {
     Tensor sum = sum(tensor, axes);
-    int reductionSize = Engine.sizeOf(Engine.getSubShape(tensor.shape, axes));
+    int reductionSize = Utility.sizeOf(Utility.getSubShape(tensor.shape, axes));
 
     return mul(sum, 1.0 / reductionSize);
   }
@@ -424,7 +487,7 @@ public class Tensor {
     return new Tensor(TensorCore.reduce(tensor.core, Statistics::range, axes)).noGrad();
   }
 
-  public Tensor median(int... axes) {return range(this, axes);}
+  public Tensor median(int... axes) {return median(this, axes);}
   public static Tensor median(Tensor tensor, int... axes) {
     if (tensor.requiresGrad) {
       throw new UnsupportedOperationException("median() is not differentiable");
@@ -433,7 +496,7 @@ public class Tensor {
     return new Tensor(TensorCore.reduce(tensor.core, Statistics::median, axes)).noGrad();
   }
 
-  public Tensor mode(int... axes) {return range(this, axes);}
+  public Tensor mode(int... axes) {return mode(this, axes);}
   public static Tensor mode(Tensor tensor, int... axes) {
     if (tensor.requiresGrad) {
       throw new UnsupportedOperationException("mode() is not differentiable");
@@ -442,7 +505,7 @@ public class Tensor {
     return new Tensor(TensorCore.reduce(tensor.core, Statistics::mode, axes)).noGrad();
   }
 
-  public Tensor quartile1(int... axes) {return range(this, axes);}
+  public Tensor quartile1(int... axes) {return quartile1(this, axes);}
   public static Tensor quartile1(Tensor tensor, int... axes) {
     if (tensor.requiresGrad) {
       throw new UnsupportedOperationException("quartile1() is not differentiable");
@@ -451,7 +514,7 @@ public class Tensor {
     return new Tensor(TensorCore.reduce(tensor.core, Statistics::quartile1, axes)).noGrad();
   }
 
-  public Tensor quartile3(int... axes) {return range(this, axes);}
+  public Tensor quartile3(int... axes) {return quartile3(this, axes);}
   public static Tensor quartile3(Tensor tensor, int... axes) {
     if (tensor.requiresGrad) {
       throw new UnsupportedOperationException("quartile3() is not differentiable");
@@ -460,7 +523,7 @@ public class Tensor {
     return new Tensor(TensorCore.reduce(tensor.core, Statistics::quartile3, axes)).noGrad();
   }
 
-  public Tensor iqr(int... axes) {return range(this, axes);}
+  public Tensor iqr(int... axes) {return iqr(this, axes);}
   public static Tensor iqr(Tensor tensor, int... axes) {
     if (tensor.requiresGrad) {
       throw new UnsupportedOperationException("iqr() is not differentiable");
@@ -485,51 +548,51 @@ public class Tensor {
 
   // BINARY
 
-  public static Tensor add(Tensor a, Tensor b) {
-    return Tensor.combine(a, b, (x, y) -> x + y, (x, y) -> 1.0, (x, y) -> 1.0);
+  public static Tensor add(Tensor tensorA, Tensor tensorB) {
+    return Tensor.elementwise(tensorA, tensorB, (x, y) -> x + y, (x, y) -> 1.0, (x, y) -> 1.0);
   }
 
-  public static Tensor sub(Tensor a, Tensor b) {
-    return Tensor.combine(a, b, (x, y) -> x - y, (x, y) -> 1.0, (x, y) -> 1.0);
+  public static Tensor sub(Tensor tensorA, Tensor tensorB) {
+    return Tensor.elementwise(tensorA, tensorB, (x, y) -> x - y, (x, y) -> 1.0, (x, y) -> -1.0);
   }
 
-  public static Tensor hadamard(Tensor a, Tensor b) {
-    return Tensor.combine(a, b, (x, y) -> x * y, (x, y) -> y, (x, y) -> x);
+  public static Tensor hadamard(Tensor tensorA, Tensor tensorB) {
+    return Tensor.elementwise(tensorA, tensorB, (x, y) -> x * y, (x, y) -> y, (x, y) -> x);
   }
 
-  public static Tensor div(Tensor a, Tensor b) {
-    return Tensor.combine(a, b, (x, y) -> x / y, (x, y) -> 1.0 / y, (x, y) -> 1.0 / x);
+  public static Tensor div(Tensor tensorA, Tensor tensorB) {
+    return Tensor.elementwise(tensorA, tensorB, (x, y) -> x / y, (x, y) -> 1.0 / y, (x, y) -> -x / Math.pow(y, 2));
   }
 
-  public static Tensor pow(Tensor a, Tensor b) {
-    return Tensor.combine(a, b, (x, y) -> Math.pow(x, y), (x, y) -> 1.0 / (y * Math.pow(x, y - 1)), (x, y) -> Math.pow(x, y) * Math.log(x));
+  public static Tensor pow(Tensor tensorA, Tensor tensorB) {
+    return Tensor.elementwise(tensorA, tensorB, (x, y) -> Math.pow(x, y), (x, y) -> y * Math.pow(x, y - 1), (x, y) -> Math.pow(x, y) * Math.log(x));
   }
 
   // function
 
   public static Tensor rescaleStandard(Tensor tensor){
-    double mean = Statistics.mean(tensor.core.flatten());
-    double stdDev = Statistics.stdev(tensor.core.flatten());
+    double mean = Statistics.mean(tensor.core.dump());
+    double stdDev = Statistics.stdev(tensor.core.dump());
 
     return apply(tensor, n -> (n - mean) / stdDev, n -> 1.0 / stdDev);
   }
 
   public static Tensor rescaleMinMax(Tensor tensor){
-    double max = Statistics.max(tensor.core.flatten());
-    double min = Statistics.min(tensor.core.flatten());
+    double max = Statistics.max(tensor.core.dump());
+    double min = Statistics.min(tensor.core.dump());
 
     return apply(tensor, n -> (n - min) / (max - min), n -> 1.0 / (max - min));
   }
   
   public static Tensor rescaleRobust(Tensor tensor){
-    double median = Statistics.median(tensor.core.flatten());
-    double iqr = Statistics.iqr(tensor.core.flatten());
+    double median = Statistics.median(tensor.core.dump());
+    double iqr = Statistics.iqr(tensor.core.dump());
     
     return apply(tensor, n -> (n - median) / iqr, n -> 1.0 / iqr);
   }
   
   public static Tensor rescaleMaxAbs(Tensor tensor){
-    double maxAbs = Statistics.max(ArrayTools.foreach(tensor.core.flatten(), n -> Math.abs(n)));
+    double maxAbs = Statistics.max(ArrayTools.foreach(tensor.core.dump(), n -> Math.abs(n)));
     
     return apply(tensor, n -> n / maxAbs, n -> 1.0 / maxAbs);
   }
@@ -537,6 +600,19 @@ public class Tensor {
   // ########################################################################################################### //
   //                                                  UTILITY                                                    //
   // ########################################################################################################### //
+
+  @Override public List<Tensor> getParents() { return Collections.unmodifiableList(this.parents); }
+  @Override public int[] getShape() { return this.shape.clone(); }
+  @Override public Backwards getGradFunc() { return this.derivative; }
+    
+  /**
+   * Returns a flat double array containing the elements of this tensor in row-major order.
+   * 
+   * @return a flat array containing the elements of this tensor
+   */
+  public double[] dump() {
+    return this.core.dump();
+  }
 
   /**
    * Disables gradient computation for this tensor. Cannot be undone and changes the instance itself
@@ -554,7 +630,7 @@ public class Tensor {
   public static Tensor noGrad(Tensor tensor) {
     tensor.requiresGrad = false;
     tensor.parents = null;
-    tensor.gradFunc = null;
+    tensor.derivative = null;
 
     return tensor;
   }
@@ -565,7 +641,17 @@ public class Tensor {
 
   @Override
   public String toString() {
-    return "Tensor" + this.core.prettyPrint();
+    if (this.core.dump() == null || this.shape == null || this.core.dump().length == 0) return "Tensor[null]";
+
+    String prefix = "Tensor" + Arrays.toString(this.shape) + "(\n";
+    String content = Utility.print(this.core.dump(), this.shape, this.core.getStrides(), 0, 0, 2);
+    String suffix = " grad=" + this.requiresGrad;
+
+    if (verbose) {
+      return prefix + content + "\n\n" + suffix + "\n)";
+    } else {
+      return prefix + content + "\n)";
+    }
   }
 
   // ########################################################################################################### //
@@ -580,7 +666,7 @@ public class Tensor {
       this.grad = Tensor.zerosLike(this);
     }
     // Use your Backend's combine method to add the gradients
-    this.grad = new Tensor(TensorCore.combine(this.grad.core, incomingGrad.core, (a, b) -> a + b));
+    this.grad = new Tensor(TensorCore.elementwise(this.grad.core, incomingGrad.core, (a, b) -> a + b));
   }
 
   public static List<Tensor> buildGraph(Tensor root) {
@@ -612,7 +698,7 @@ public class Tensor {
       throw new IllegalStateException("Called backward on a tensor that doesn't require gradients.");
     } 
 
-    if (this.parents == null && this.gradFunc == null) {
+    if (this.parents == null && this.derivative == null) {
       throw new IllegalStateException(
         "This tensor is the result of a non-differentiable operation."
       );
@@ -623,8 +709,8 @@ public class Tensor {
     List<Tensor> order = buildGraph(this);
 
     for (Tensor node : order) {
-      if (node.gradFunc != null) {
-        node.gradFunc.apply(node.grad);
+      if (node.derivative != null) {
+        node.derivative.apply(node.grad);
       }
     }
   }

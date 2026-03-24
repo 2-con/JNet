@@ -13,9 +13,7 @@ public interface Binary {
    */
   static double[] apply(double[] a, double[] b, Binary operation) {
     if (a.length != b.length) {
-      throw new IllegalArgumentException(
-        "Tensor size mismatch: Cannot operate on arrays of size " + a.length + " and " + b.length
-      );
+      throw new IllegalArgumentException("Size mismatch: Cannot operate on arrays of size " + a.length + " and " + b.length);
     }
 
     double[] result = new double[a.length];

@@ -1,8 +1,8 @@
 package tensor;
-import java.util.Arrays;
 import java.util.ArrayList;
-
+import java.util.Arrays;
 import tensor.core.Engine;
+import tensor.core.Utility;
 import tensor.ops.Binary;
 import tensor.ops.Reduction;
 import tensor.ops.Unary;
@@ -20,12 +20,12 @@ public class TensorCore {
     for (int d : shape) expectedSize *= d;
 
     if (data.length != expectedSize) {
-      throw new IllegalArgumentException("Tensor of size " + data.length + " cannot be reshaped to shape " + Arrays.toString(shape));
+      throw new IllegalArgumentException("Tensor of size " + data.length + " cannot be shaped to " + Arrays.toString(shape));
     }
 
     this.data = data.clone();
     this.shape = shape.clone();
-    this.strides = Engine.calculateStrides(shape);
+    this.strides = Utility.calculateStrides(shape);
     this.rank = this.shape.length;
     this.size = this.data.length;
   }
@@ -46,11 +46,18 @@ public class TensorCore {
   }
 
   // ########################################################################################################### //
-  //                                     STATIC TensorCore OPERATIONS                                            //
+  //                                         TensorCore OPERATIONS                                               //
   // ########################################################################################################### //
   
-  // SPCEIALS
+  // SPECIAL
 
+  /**
+   * Permute the TensorCore according to a given permutation.
+   * 
+   * @param newOrder the permutation of axes to permute the tensor
+   * @return a new TensorCore containing the result of the permutation
+   */
+  public TensorCore permute(int... newOrder) {return TensorCore.permute(this, newOrder);}
   /**
    * Applies a permutation operation to the given tensor.
    * 
@@ -91,10 +98,123 @@ public class TensorCore {
     return new TensorCore(tensor.data, newDims, newStrides);
   }
 
+  /**
+   * Broadcasts the TensorCore to have the specified axes.
+   * 
+   * @param newAxes the new axes to broadcast to
+   * @return a new TensorCore containing the result of the broadcast
+   */
+  public TensorCore broadcast(int... targetShape) {return TensorCore.broadcast(this, targetShape);}
+  /**
+   * Broadcasts a tensor from one shape to another.
+   * 
+   * The dimensions of the input tensor and the target shape must match or one must be 1.
+   * If the dimensions of the input tensor and the target shape are identical, the tensor is returned unchanged.
+   * 
+   * @param tensor the input tensor
+   * @param targetShape the target shape of the tensor
+   * @return a new TensorCore containing the broadcasted tensor
+   * @throws RuntimeException if the dimensions of the input tensor and the target shape do not match or if one does not equal 1
+   */
+  public static TensorCore broadcast(TensorCore tensor, int... targetShape) {
+    if (java.util.Arrays.equals(tensor.shape, targetShape)) {
+      return tensor;
+    }
+
+    // Dimensions must match OR one must be 1
+    if (tensor.shape.length != targetShape.length) {
+      throw new RuntimeException("Mismatching rank for TensorCore broadcasting, attempting to broadcast " + java.util.Arrays.toString(tensor.shape) + " to " + java.util.Arrays.toString(targetShape));
+    }
+
+    for (int i = 0; i < tensor.shape.length; i++) {
+      if (tensor.shape[i] != targetShape[i] && tensor.shape[i] != 1) {
+        throw new RuntimeException("Mismatching dimension at axis " + i + ", attempting to broadcast " + tensor.shape[i] + " to " + targetShape[i]);
+      }
+    }
+
+    double[] broadcastedData = Engine.broadcast(tensor.data, tensor.shape, targetShape);
+    return new TensorCore(broadcastedData, targetShape);
+  }
+
+  /**
+   * Squeezes the TensorCore to remove axes with size 1.
+   *
+   * @param axes the axes to squeeze
+   * @return a new TensorCore containing the result of the squeeze operation
+   */
+  public TensorCore squeeze() {return TensorCore.squeeze(this);}
+  /**
+   * Squeeze the given tensor; all dimensions of size 1 are removed from the tensor
+   * 
+   * @param tensor the input tensor
+   * @return a new TensorCore containing the input tensor with all dimensions of size 1 removed
+   */
+  public static TensorCore squeeze(TensorCore tensor) {
+    return new TensorCore(tensor.data, Utility.squeezeShape(tensor.shape));
+  }
+
+  /**
+   * Returns a new TensorCore containing the result of unsqueezing the input tensor along the specified axes.
+   *
+   * @param axes the axes to unsqueeze
+   * @return a new TensorCore containing the result of the unsqueeze operation
+   */
+  public TensorCore unsqueeze(int... axes) {return TensorCore.unsqueeze(this, axes);}
+  /**
+   * Unsqueeze the given tensor along the specified axes; extra dimensions in the tensor are added in the specified indices.
+   * 
+   * @param tensor the input tensor
+   * @param axes the axes to unqueeze the tensor along
+   * @return a new TensorCore containing the input tensor with the specified axes expanded to size 1
+   * @throws IllegalArgumentException if the specified axes are out of bounds of the input tensor
+   */
+  public static TensorCore unsqueeze(TensorCore tensor, int... axes) {
+    for (int axis : axes) {
+      if (axis < 0 || axis >= tensor.shape.length) {
+        throw new IllegalArgumentException("Unsqueeze axes out of bounds: attempted to expand dimensions along axis " + axis);
+      }
+    }
+
+    return new TensorCore(tensor.data, Utility.unsqueezeShape(tensor.shape, axes));
+  }
+
+  /**
+   * Reshapes the given tensor into the specified shape.
+   *
+   * @param shape the desired shape of the output tensor
+   * @return a new TensorCore containing the reshaped tensor
+   * @throws IllegalArgumentException if the size of the input tensor does not match the size of the specified shape
+   */
+  public TensorCore reshape(int... shape) {return TensorCore.reshape(this, shape);}
+  /**
+   * Reshapes the given tensor into the specified shape.
+   *
+   * @param tensor the input tensor
+   * @param shape the desired shape of the output tensor
+   * @return a new TensorCore containing the reshaped tensor
+   * @throws IllegalArgumentException if the size of the input tensor does not match the size of the specified shape
+   */
+  public static TensorCore reshape(TensorCore tensor, int... shape) {
+    if (tensor.size != Utility.sizeOf(shape)) {
+      throw new IllegalArgumentException("Insufficient elements to reshape Tensor" + Arrays.toString(tensor.shape) + " (size " + tensor.size + ") into Tensor" + Arrays.toString(shape) + " (size " + tensor.size + ")");
+    }
+
+    return new TensorCore(tensor.data, shape);
+  }
+
   // UNARY
 
   /**
-   * Applies a reduction operation elements specified in the axes of the given tensor.
+   * Applies a reduction operation elements specified in the axes of the given tensor. reduce() defaults to preserving the dimension(s).
+   *
+   * @param TensorCore the input tensor
+   * @param operation the reduction operation to apply
+   * @param axes the axes to apply the reduction operation by
+   * @return a new TensorCore containing the results
+   */
+  public TensorCore reduce(Reduction operation, int... axes) {return TensorCore.reduce(this, operation, axes);}
+  /**
+   * Applies a reduction operation elements specified in the axes of the given tensor. reduce() defaults to preserving the dimension(s).
    *
    * @param TensorCore the input tensor
    * @param operation the reduction operation to apply
@@ -102,9 +222,41 @@ public class TensorCore {
    * @return a new TensorCore containing the results
    */
   public static TensorCore reduce(TensorCore tensor, Reduction operation, int... axes) {
-    return new TensorCore(Reduction.apply(tensor.data, tensor.shape, tensor.strides, axes, operation), Engine.getSurvivors(tensor.shape, axes));
+    return new TensorCore(Reduction.apply(tensor.data, tensor.shape, tensor.strides, axes, operation, true), Utility.getSurvivors(tensor.shape, axes, true));
   }
 
+  /**
+   * Applies a reduction operation elements specified in the axes of the given tensor with the option to collapse the dimension(s) which
+   * TensorCore preserves by default
+   *
+   * @param TensorCore the input tensor
+   * @param operation the reduction operation to apply
+   * @param axes the axes to apply the reduction operation by
+   * @param keepDims whether to reduce the dimension(s)
+   * @return a new TensorCore containing the results
+   */
+  public TensorCore reduce(Reduction operation, boolean keepDims, int... axes) {return TensorCore.reduce(this, operation, keepDims, axes);}
+  /**
+   * Applies a reduction operation elements specified in the axes of the given tensor with the option to collapse the dimension(s) which
+   * TensorCore preserves by default
+   *
+   * @param TensorCore the input tensor
+   * @param operation the reduction operation to apply
+   * @param axes the axes to apply the reduction operation by
+   * @param keepDims whether to reduce the dimension(s)
+   * @return a new TensorCore containing the results
+   */
+  public static TensorCore reduce(TensorCore tensor, Reduction operation, boolean keepDims, int... axes) {
+    return new TensorCore(Reduction.apply(tensor.data, tensor.shape, tensor.strides, axes, operation, keepDims), Utility.getSurvivors(tensor.shape, axes, keepDims));
+  }
+
+  /**
+   * Apply a unary operation to all elements of this tensor.
+   *
+   * @param operation the unary operation to apply
+   * @return a new TensorCore containing the results
+   */
+  public TensorCore apply(Unary operation) {return TensorCore.apply(this, operation);}
   /**
    * Applies a unary operation to all elements of the given tensor.
    *
@@ -120,6 +272,14 @@ public class TensorCore {
   // BINARY
 
   /**
+   * Combine this TensorCore with another TensorCore using a binary operation elementwise.
+   *
+   * @param other the other TensorCore to combine with
+   * @param operation the binary operation to apply
+   * @return a new TensorCore containing the results
+   */
+  public TensorCore elementwise(TensorCore other, Binary operation) {return TensorCore.elementwise(this, other, operation);}
+  /**
    * Combines two tensors with a binary operation elementwise.
    *
    * @param a the first tensor
@@ -128,14 +288,30 @@ public class TensorCore {
    * @return a new TensorCore containing the results
    * @throws RuntimeException if the shapes of the two tensors are mismatched
    */
-  public static TensorCore combine(TensorCore a, TensorCore b, Binary operation) {
-    if (!Arrays.equals(a.shape, b.shape)) {
-      throw new RuntimeException("Incompatible shapes for Binary operation; got " + Arrays.toString(a.shape) + " and " + Arrays.toString(b.shape));
+  public static TensorCore elementwise(TensorCore a, TensorCore b, Binary operation) {
+    if (a.rank != b.rank) {
+      throw new IllegalArgumentException("Mismatching rank for binary elementwise operation. Got Tensors of rank " + a.rank + " and " + b.rank);
     }
+    if (!Arrays.equals(a.shape, b.shape)) {
+      int[] broadcastShapeTarget = Utility.broadcastedShape(a.shape, b.shape);
+
+      a = a.broadcast(broadcastShapeTarget);
+      b = b.broadcast(broadcastShapeTarget);
+    }
+
     double[] resultData = Binary.apply(a.data, b.data, operation);
     return new TensorCore(resultData, a.shape);
   }
 
+  /**
+   * Contract this TensorCore with another tensor.
+   *
+   * @param b the other TensorCore to contract with
+   * @param indicesA the indices of the first TensorCore to contract along
+   * @param indicesB the indices of the second TensorCore to contract along
+   * @return a new TensorCore containing the result of the contraction
+   */
+  public TensorCore contract(TensorCore b, int[] indicesA, int[] indicesB) {return TensorCore.contract(this, b, indicesA, indicesB);}
   /**
    * Contracts two tensors along the given axes.
    * 
@@ -151,69 +327,16 @@ public class TensorCore {
   public static TensorCore contract(TensorCore a, TensorCore b, int[] axesA, int[] axesB) {
     for (int i = 0; i < axesA.length; i++) {
       if (a.shape[axesA[i]] != b.shape[axesB[i]]) {
-        throw new IllegalArgumentException("rankension mismatch at contraction axes.");
+        throw new IllegalArgumentException("Mismatching dimensions at contraction axes, Tensor a has size " + a.shape[axesA[i]] + " at index " + axesA[i] +  " while Tensor b has size " + b.shape[axesB[i]]  + " at index " + axesB[i]);
       }
     }
 
-    int[] resShape = Engine.calculateResShape(a.shape, b.shape, axesA, axesB);
+    int[] resShape = Utility.calculateResShape(a.shape, b.shape, axesA, axesB);
     double[] resultData = Engine.contract(a.data, a.strides, b.data, b.strides, a.shape, axesA, b.shape, axesB, resShape);
 
     return new TensorCore(resultData, resShape);
   }
   
-  // ########################################################################################################### //
-  //                                     INSTANCE TensorCore OPERATIONS                                          //
-  // ########################################################################################################### //
-
-  // SPECIALS
-
-  /**
-   * Permute the TensorCore according to a given permutation.
-   * 
-   * @param newOrder the permutation of axes to permute the tensor
-   * @return a new TensorCore containing the result of the permutation
-   */
-  public TensorCore permute(int... newOrder) {return TensorCore.permute(this, newOrder);}
-
-  // UNARY
-
-  /**
-   * Apply a reduction operation to this tensor.
-   *
-   * @param operation the reduction operation to apply
-   * @return a new TensorCore containing the results
-   */
-  public TensorCore reduce(Reduction operation, int... axes) {return TensorCore.reduce(this, operation, axes);}
-
-  /**
-   * Apply a unary operation to all elements of this tensor.
-   *
-   * @param operation the unary operation to apply
-   * @return a new TensorCore containing the results
-   */
-  public TensorCore apply(Unary operation) {return TensorCore.apply(this, operation);}
-
-  // BINARY
-
-  /**
-   * Combine this TensorCore with another TensorCore using a binary operation elementwise.
-   *
-   * @param other the other TensorCore to combine with
-   * @param operation the binary operation to apply
-   * @return a new TensorCore containing the results
-   */
-  public TensorCore combine(TensorCore other, Binary operation) {return TensorCore.combine(this, other, operation);}
-
-  /**
-   * Contract this TensorCore with another tensor.
-   *
-   * @param b the other TensorCore to contract with
-   * @param indicesA the indices of the first TensorCore to contract along
-   * @param indicesB the indices of the second TensorCore to contract along
-   * @return a new TensorCore containing the result of the contraction
-   */
-  public TensorCore contract(TensorCore b, int[] indicesA, int[] indicesB) {return TensorCore.contract(this, b, indicesA, indicesB);}
-
   // ########################################################################################################### //
   //                                                  UTILITY                                                    //
   // ########################################################################################################### //
@@ -231,7 +354,7 @@ public class TensorCore {
    * 
    * @return the underlying flat array of this tensor
    */
-  public double[] flatten() {
+  public double[] dump() {
     return this.data.clone();
   }
 
@@ -240,22 +363,17 @@ public class TensorCore {
       throw new IllegalArgumentException("Invalid number of indices.");
     }
 
-    return this.data[Engine.getIndex(this.strides, indices)];
+    return this.data[Utility.getIndex(this.strides, indices)];
   }
 
   @Override
   public String toString() {
-    return "TensorCore" + prettyPrint();
-  }
-
-  public String prettyPrint() {
-    if (this.data == null || this.shape == null || this.data.length == 0) return "[]";
+    if (this.data == null || this.shape == null || this.data.length == 0) return "TensorCore[null]";
     
-    int maxWidth = 0;
-    for (double d : this.data) {
-      maxWidth = Math.max(maxWidth, String.format("%.4f", d).length());
-    }
+    String prefix = "TensorCore" + Arrays.toString(this.shape) + "(\n";
+    String content = Utility.print(this.data, this.shape, this.strides, 0, 0, 2);
+    String suffix = "";
 
-    return Arrays.toString(this.shape) + "\n" + Engine.prettyPrint(this.data, this.shape, this.strides, 0, 0, maxWidth);
+    return prefix + content + "\n)";
   }
 }

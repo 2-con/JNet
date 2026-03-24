@@ -7,7 +7,7 @@ public class Generator {
   private static final Random RANDOM = new Random();
 
   public static double[] generateGaussian(int... shape) {
-    int size = Engine.sizeOf(shape);
+    int size = Utility.sizeOf(shape);
 
     double[] data = new double[size];
     for (int i = 0; i < size; i++) {
@@ -17,7 +17,7 @@ public class Generator {
   }
 
   public static double[] generateExponential(int... shape) {
-    int size = Engine.sizeOf(shape);
+    int size = Utility.sizeOf(shape);
 
     double[] data = new double[size];
     for (int i = 0; i < size; i++) {
@@ -27,7 +27,7 @@ public class Generator {
   }
 
   public static double[] generateUniform(int... shape) {
-    int size = Engine.sizeOf(shape);
+    int size = Utility.sizeOf(shape);
 
     double[] data = new double[size];
     for (int i = 0; i < size; i++) {
@@ -37,13 +37,13 @@ public class Generator {
   }
 
   public static double[] zeros(int... shape) {
-    int size = Engine.sizeOf(shape);
+    int size = Utility.sizeOf(shape);
     
     return new double[size];
   }
 
   public static double[] ones(int... shape) {
-    int size = Engine.sizeOf(shape);
+    int size = Utility.sizeOf(shape);
     double[] data = new double[size];
     Arrays.fill(data, 1.0);
 

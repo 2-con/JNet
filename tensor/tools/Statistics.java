@@ -4,6 +4,12 @@ import java.util.Arrays;
 import java.util.HashMap;
 
 public class Statistics {
+  public static double sum(double[] array) {
+    double ans = 0;
+    for (double n : array) ans += n;
+    return ans;
+  }
+
   public static double min(double[] array) {
     double ans = Double.MAX_VALUE;
     for (double n : array) ans = (n < ans) ? n : ans;
