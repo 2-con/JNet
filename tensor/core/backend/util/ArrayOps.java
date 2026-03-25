@@ -1,8 +1,9 @@
-package tensor.tools;
+package tensor.core.backend.util;
 
 import java.util.function.DoubleUnaryOperator;
 
-public class ArrayTools {
+// for generic array operations
+public class ArrayOps {
 
   // utilities
 

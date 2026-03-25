@@ -1,4 +1,4 @@
-package tensor.ops;
+package tensor.core.backend.func;
 
 @FunctionalInterface
 public interface Binary {

@@ -1,9 +1,14 @@
-package tensor.tools;
+package stats;
 
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
+import tensor.core.backend.util.ArrayOps;
+
+/*
+there is like a grand total of 3 methods regularly used, the rest are fillers for a bygone version
+*/
 public class Statistics {
 
   // double arrays
@@ -73,7 +78,7 @@ public class Statistics {
 
   public static double variance(double[] array) {
     double mu = mean(array);
-    double[] shifted = ArrayTools.foreach(new double[array.length], n -> Math.pow(n - mu, 2));
+    double[] shifted = ArrayOps.foreach(new double[array.length], n -> Math.pow(n - mu, 2));
 
     return mean(shifted);
   }
@@ -86,7 +91,7 @@ public class Statistics {
     double mu = mean(array);
     double stdeviation = stdev(array);
 
-    double[] shifted = ArrayTools.foreach(new double[array.length], n -> Math.pow(n - mu, 3));
+    double[] shifted = ArrayOps.foreach(new double[array.length], n -> Math.pow(n - mu, 3));
 
     return mean(shifted) / Math.pow(stdeviation, 3);
   }
@@ -95,7 +100,7 @@ public class Statistics {
     double mu = mean(array);
     double stdeviation = stdev(array);
 
-    double[] shifted = ArrayTools.foreach(new double[array.length], n -> Math.pow(n - mu, 4));
+    double[] shifted = ArrayOps.foreach(new double[array.length], n -> Math.pow(n - mu, 4));
 
     return mean(shifted) / Math.pow(stdeviation, 4);
   }

@@ -1,8 +1,8 @@
-package tensor.core;
+package tensor.core.backend.compute;
 
-import tensor.tools.ArrayTools;
+import tensor.core.backend.util.ArrayOps;
 
-public class Memory {
+public class PointerLogic {
   public static int[] calculateStrides(int[] shape) {
     int[] strides = new int[shape.length];
     int st = 1;
@@ -46,7 +46,7 @@ public class Memory {
 
     int resPtr = isA ? 0 : (resCoords.length - (fullShape.length - axes.length));
     for (int i = 0; i < fullShape.length; i++) {
-      if (!ArrayTools.contains(axes, i)) {
+      if (!ArrayOps.contains(axes, i)) {
         fullCoords[i] = resCoords[resPtr++];
       }
     }

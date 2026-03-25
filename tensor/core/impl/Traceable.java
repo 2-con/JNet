@@ -1,4 +1,4 @@
-package tensor.core;
+package tensor.core.impl;
 
 import java.util.List;
 

@@ -1,47 +1,33 @@
 package tensor.tools;
 
 import java.util.Arrays;
-import tensor.TensorCore;
-import tensor.core.Memory;
-import tensor.core.Traceable;
+import tensor.core.impl.DataContainer;
+import tensor.core.impl.TensorCore;
 
 public class Debug {
-  public static void print(double[] array, int[] shape) {
-    System.out.println(ArrayTools.print(array, shape, Memory.calculateStrides(shape), 0, 0, 0));
-  }
-
-  public static void print(Traceable tensor) {
-    System.out.println(tensor);
-  }
-
-  public static void print(TensorCore tensor) {
-    System.out.println(tensor);
-  }
-
-  public static void trace(Traceable tensor) {
-    printGraph(tensor, "", true, true);
-  }
-  
-  private static void printGraph(Traceable node, String indent, boolean isLast, boolean firstLayer) {
-    String operation = (node.getGradFunc() != null) ? " [Product]" : " [Leaf]";
-    String shape = Arrays.toString(node.getShape());
-    
-    System.out.print(indent);
-    System.out.print(isLast ? "└─ " : "├─ ");
-    
-    if (firstLayer) {
-      System.out.println("\r▣  Tensor" + shape + " [ROOT]");
-    } else {
-      System.out.println("Tensor" + shape + operation);
-    }
-
-    // 2. Recurse into parents
-    if (node.getParents() != null) {
-      for (int i = 0; i < node.getParents().size(); i++) {
-        boolean lastChild = (i == node.getParents().size() - 1);
-        printGraph(node.getParents().get(i), indent + (isLast ? "   " : "│  "), lastChild, false);
-      }
+  public static void parse(DataContainer tensor) {
+    double[] data = tensor.dump();
+    for (double d : data) {
+      if (Double.isNaN(d)) throw new RuntimeException("Detected NaN in DataContaner");
+      if (Double.isInfinite(d)) System.err.println("Warning: Infinity detected");
     }
   }
 
+  public static void parse(TensorCore tensor) {
+    double[] data = tensor.dump();
+    for (double d : data) {
+      if (Double.isNaN(d)) throw new RuntimeException("Detected NaN in DataContaner");
+      if (Double.isInfinite(d)) System.err.println("Warning: Infinity detected");
+    }
+  }
+
+  public static double sparsity(DataContainer tensor) {
+    double[] data = tensor.dump();
+    return (double) Arrays.stream(data).filter(d -> d == 0).count() / data.length;
+  }
+
+  public static double sparsity(TensorCore tensor) {
+    double[] data = tensor.dump();
+    return (double) Arrays.stream(data).filter(d -> d == 0).count() / data.length;
+  }
 }

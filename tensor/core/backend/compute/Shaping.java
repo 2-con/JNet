@@ -1,12 +1,12 @@
-package tensor.core;
+package tensor.core.backend.compute;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import tensor.tools.ArrayTools;
-import tensor.tools.Statistics;
+import stats.Statistics;
+import tensor.core.backend.util.ArrayOps;
 
-public class Utility {
+public class Shaping {
   public static int[] calculateResShape(int[] shapeA, int[] shapeB, int[] axesA, int[] axesB) {
     int[] survivorsA = getSurvivors(shapeA, axesA);
     int[] survivorsB = getSurvivors(shapeB, axesB);
@@ -98,7 +98,7 @@ public class Utility {
     int[] result = new int[newRank];
 
     int shapePtr = 0;
-    for (int i = 0; i < newRank; i++) result[i] = (ArrayTools.contains(axes, i)) ? 1 : shape[shapePtr++];
+    for (int i = 0; i < newRank; i++) result[i] = (ArrayOps.contains(axes, i)) ? 1 : shape[shapePtr++];
     
     return result;
   }
@@ -107,7 +107,7 @@ public class Utility {
     int volume = Statistics.prod(subShape);
     int[] offsets = new int[volume];
     for (int k = 0; k < volume; k++) {
-      int[] kCoords = Utility.unravel(k, subShape);
+      int[] kCoords = Shaping.unravel(k, subShape);
       int offset = 0;
       for (int i = 0; i < axes.length; i++) {
         offset += kCoords[i] * strides[axes[i]];

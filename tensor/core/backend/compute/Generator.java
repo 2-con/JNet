@@ -1,9 +1,9 @@
-package tensor.core;
+package tensor.core.backend.compute;
 
 import java.util.Arrays;
 import java.util.Random;
 
-import tensor.tools.Statistics;
+import stats.Statistics;
 
 public class Generator {
   private static final Random RANDOM = new Random();

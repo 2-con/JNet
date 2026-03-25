@@ -1,17 +1,17 @@
-package tensor.ops;
-import tensor.core.Memory;
-import tensor.core.Utility;
-import tensor.tools.Statistics;
+package tensor.core.backend.func;
+import stats.Statistics;
+import tensor.core.backend.compute.PointerLogic;
+import tensor.core.backend.compute.Shaping;
 
 @FunctionalInterface
 public interface Reduction {
   double reduce(double[] accumulator);
   
   public static double[] apply(double[] data, int[] shape, int[] strides, int[] axes, Reduction operation, boolean keepDims) {
-    int[] resShape = Utility.getSurvivors(shape, axes);
+    int[] resShape = Shaping.getSurvivors(shape, axes);
     double[] resData = new double[Statistics.prod(resShape)];
     
-    int[] subShape = Utility.getSubShape(shape, axes); // size of one slice
+    int[] subShape = Shaping.getSubShape(shape, axes); // size of one slice
     int reductionVolume = Statistics.prod(subShape);
     
     int[] resCoords = new int[resShape.length];
@@ -21,9 +21,9 @@ public interface Reduction {
 
     if (resShape.length == 0) {
       for (int k = 0; k < reductionVolume; k++) {
-          int[] kCoords = Utility.unravel(k, subShape);
+          int[] kCoords = Shaping.unravel(k, subShape);
           // use mapToOffset even for scalars to account for strides/offsets
-          int offset = Memory.mapToOffset(new int[0], kCoords, axes, shape, strides, true);
+          int offset = PointerLogic.mapToOffset(new int[0], kCoords, axes, shape, strides, true);
           subShapeData[k] = data[offset];
       }
       return new double[]{ operation.reduce(subShapeData) };
@@ -31,17 +31,17 @@ public interface Reduction {
 
     do {
       for (int k = 0; k < reductionVolume; k++) { // fills up the resulting spot by looping over the slice
-        int[] kCoords = Utility.unravel(k, subShape); // get the sliced indices of the kth element
+        int[] kCoords = Shaping.unravel(k, subShape); // get the sliced indices of the kth element
 
         // map coords to offset coors suitable for the 1d data
-        int offset = Memory.mapToOffset(resCoords, kCoords, axes, shape, strides, true);
+        int offset = PointerLogic.mapToOffset(resCoords, kCoords, axes, shape, strides, true);
         subShapeData[k] = data[offset];
       }
 
       double ans = operation.reduce(subShapeData);
 
       resData[resIdx++] = ans;
-    } while (Memory.nextCoordinate(resCoords, resShape));
+    } while (PointerLogic.nextCoordinate(resCoords, resShape));
 
     return resData;
   }

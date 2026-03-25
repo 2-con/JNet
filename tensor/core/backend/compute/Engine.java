@@ -1,12 +1,12 @@
-package tensor.core;
+package tensor.core.backend.compute;
 
-import tensor.tools.Statistics;
+import stats.Statistics;
 
 public class Engine {
   public static double[] transformData(double[] gradOutput, int[] gradShape, int[] inputShape) {
     double[] result = new double[Statistics.prod(inputShape)];
-    int[] inputStrides = Memory.calculateStrides(inputShape);
-    int[] gradStrides  = Memory.calculateStrides(gradShape);
+    int[] inputStrides = PointerLogic.calculateStrides(inputShape);
+    int[] gradStrides  = PointerLogic.calculateStrides(gradShape);
 
     for (int i = 0; i < result.length; i++) {
       int remaining = i;
@@ -26,8 +26,8 @@ public class Engine {
 
   public static double[] broadcast(double[] data, int[] srcShape, int[] targetShape) {
     int targetSize = Statistics.prod(targetShape);
-    int[] srcStrides = Memory.calculateStrides(srcShape);
-    int[] targetStrides = Memory.calculateStrides(targetShape);
+    int[] srcStrides = PointerLogic.calculateStrides(srcShape);
+    int[] targetStrides = PointerLogic.calculateStrides(targetShape);
     
     double[] out = new double[targetSize];
 
@@ -51,17 +51,17 @@ public class Engine {
   public static double[] contract(double[] dataA, int[] stridesA, double[] dataB, int[] stridesB, int[] shapeA, int[] axesA, int[] shapeB, int[] axesB, int[] resShape) {
     double[] resData = new double[Statistics.prod(resShape)];
     
-    int[] subShape = Utility.getSubShape(shapeA, axesA);
+    int[] subShape = Shaping.getSubShape(shapeA, axesA);
     int contractVolume = Statistics.prod(subShape);
     
-    int[] kOffsetsA = Utility.precomputeKOffsets(subShape, axesA, stridesA);
-    int[] kOffsetsB = Utility.precomputeKOffsets(subShape, axesB, stridesB);
+    int[] kOffsetsA = Shaping.precomputeKOffsets(subShape, axesA, stridesA);
+    int[] kOffsetsB = Shaping.precomputeKOffsets(subShape, axesB, stridesB);
     
     int[] resCoords = new int[resShape.length];
     int resIdx = 0;
     do {
-      int baseOffsetA = Memory.mapToOffset(resCoords, new int[axesA.length], axesA, shapeA, stridesA, true);
-      int baseOffsetB = Memory.mapToOffset(resCoords, new int[axesB.length], axesB, shapeB, stridesB, false);
+      int baseOffsetA = PointerLogic.mapToOffset(resCoords, new int[axesA.length], axesA, shapeA, stridesA, true);
+      int baseOffsetB = PointerLogic.mapToOffset(resCoords, new int[axesB.length], axesB, shapeB, stridesB, false);
 
       double sum = 0;
 
@@ -70,15 +70,15 @@ public class Engine {
       }
       resData[resIdx++] = sum;
 
-    } while (Memory.nextCoordinate(resCoords, resShape));
+    } while (PointerLogic.nextCoordinate(resCoords, resShape));
 
     return resData;
   }
 
   public static double[] reduceSum(double[] gradData, int[] gradShape, int[] origShape) {
     double[] reduced = new double[Statistics.prod(origShape)];
-    int[] gradStrides = Memory.calculateStrides(gradShape);
-    int[] origStrides = Memory.calculateStrides(origShape);
+    int[] gradStrides = PointerLogic.calculateStrides(gradShape);
+    int[] origStrides = PointerLogic.calculateStrides(origShape);
 
     for (int i = 0; i < gradData.length; i++) {
       int remaining = i;
