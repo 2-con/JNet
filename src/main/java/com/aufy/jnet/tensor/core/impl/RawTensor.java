@@ -4,8 +4,12 @@ import java.util.Arrays;
 import com.aufy.jnet.tensor.core.backend.compute.PointerLogic;
 import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
 
-public class DataContainer {
-  // unsafe, but its the engine room so whatever, just don't forget to make all of this mess package-private
+public class RawTensor {
+  /* TODO: make RawTensor a memory allocator and manager for faster processing
+  
+  currently, Engine creates and allocate a new double[] every operation. although its fine, its better if there is a global pool to reuse memory
+  and space. also, engine should also be purely functional without making any new double[]; rawtensor is fully responsible for memory stuff.
+  */
   public final double[] data;
   public final int[] shape;
   public final int rank;
@@ -13,7 +17,7 @@ public class DataContainer {
   public final int size;
   public final int[] strides;
   
-  public DataContainer(double[] data, int... shape) {
+  public RawTensor(double[] data, int... shape) {
     int expectedSize = 1;
     for (int d : shape) expectedSize *= d;
 
@@ -28,7 +32,7 @@ public class DataContainer {
     this.size = this.data.length;
   }
 
-  public DataContainer(double[] data, int[] shape, int[] strides) {
+  public RawTensor(double[] data, int[] shape, int[] strides) {
     int expectedSize = 1;
     for (int d : shape) expectedSize *= d;
 
@@ -52,27 +56,17 @@ public class DataContainer {
   public int getSize() {return this.size;}
   public int[] getStrides() {return this.strides.clone();}
 
-  /**
-   * Returns a deep copy of the raw memory buffer of this tensor.
-   * 
-   * @return a deep copy of the underlying flat array of this tensor
-   */
   public double[] dump() {
     return this.data.clone();
   }
 
-  /**
-   * Returns the raw memory buffer of this tensor. Unlike .dump(), this does not make a copy and is susceptible to data corruption if managed poorly!
-   * 
-   * @return the underlying flat array of this tensor
-   */
   public double[] rawData() {
     return this.data; // unsafe, but whatever
   }
 
   public double get(int... indices) {
     if (indices.length != this.rank) {
-      throw new IllegalArgumentException("Invalid number of indices.");
+      throw new IllegalArgumentException("Invalid number of indices");
     }
 
     return this.data[PointerLogic.getIndex(this.strides, indices)];

@@ -2,24 +2,23 @@ package com.aufy.jnet.tensor.tools;
 
 import java.util.Arrays;
 
-import com.aufy.jnet.stats.Statistics;
+import com.aufy.jnet.stats.primitive.Statistics;
 import com.aufy.jnet.tensor.core.backend.compute.PointerLogic;
 import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
-import com.aufy.jnet.tensor.core.impl.TensorCore;
-import com.aufy.jnet.tensor.core.impl.Traceable;
+import com.aufy.jnet.tensor.core.impl.CoreTensor;
 
 public class Visual {
   public static void print(double[] array, int[] shape) { // don't ever use this for internal printing: use ArraOps in core/backend/util instead 
     System.out.println(ArrayOps.print(array, shape, PointerLogic.calculateStrides(shape), 0, 0, 0));
   }
 
-  public static void trace(Traceable tensor) {
+  public static void trace(CoreTensor tensor) {
     printGraph(tensor, "", true, true);
   }
   
-  private static void printGraph(Traceable node, String indent, boolean isLast, boolean firstLayer) {
-    String operation = (node.getGradFunc() != null) ? " [Product]" : " [Leaf]";
-    String shape = Arrays.toString(node.getShape());
+  private static void printGraph(CoreTensor node, String indent, boolean isLast, boolean firstLayer) {
+    String operation = (node.derivative != null) ? " [Product]" : " [Leaf]";
+    String shape = Arrays.toString(node.shape);
     
     System.out.print(indent);
     System.out.print(isLast ? "└─ " : "├─ ");
@@ -31,17 +30,17 @@ public class Visual {
     }
 
     // 2. Recurse into parents
-    if (node.getParents() != null) {
-      for (int i = 0; i < node.getParents().size(); i++) {
-        boolean lastChild = (i == node.getParents().size() - 1);
-        printGraph(node.getParents().get(i), indent + (isLast ? "   " : "│  "), lastChild, false);
+    if (node.parents != null) {
+      for (int i = 0; i < node.parents.size(); i++) {
+        boolean lastChild = (i == node.parents.size() - 1);
+        printGraph(node.parents.get(i), indent + (isLast ? "   " : "│  "), lastChild, false);
       }
     }
   }
 
-  public static void statisticalBreakdown(TensorCore tensor) {
+  public static void statisticalBreakdown(CoreTensor tensor) {
     System.out.println("TensorCore \n"
-      + Arrays.toString(tensor.getShape())
+      + Arrays.toString(tensor.shape)
       + "\n requiresGrad = " + tensor.requiresGrad
       + "\n size = " + tensor.size
       + "\n rank = " + tensor.rank

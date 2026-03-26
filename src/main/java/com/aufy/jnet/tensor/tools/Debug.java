@@ -2,11 +2,11 @@ package com.aufy.jnet.tensor.tools;
 
 import java.util.Arrays;
 
-import com.aufy.jnet.tensor.core.impl.DataContainer;
-import com.aufy.jnet.tensor.core.impl.TensorCore;
+import com.aufy.jnet.tensor.core.impl.CoreTensor;
+import com.aufy.jnet.tensor.core.impl.RawTensor;
 
 public class Debug {
-  public static void parse(DataContainer tensor) {
+  public static void parse(RawTensor tensor) {
     double[] data = tensor.dump();
     for (double d : data) {
       if (Double.isNaN(d)) throw new RuntimeException("Detected NaN in DataContaner");
@@ -14,7 +14,7 @@ public class Debug {
     }
   }
 
-  public static void parse(TensorCore tensor) {
+  public static void parse(CoreTensor tensor) {
     double[] data = tensor.dump();
     for (double d : data) {
       if (Double.isNaN(d)) throw new RuntimeException("Detected NaN in DataContaner");
@@ -22,12 +22,12 @@ public class Debug {
     }
   }
 
-  public static double sparsity(DataContainer tensor) {
+  public static double sparsity(RawTensor tensor) {
     double[] data = tensor.dump();
     return (double) Arrays.stream(data).filter(d -> d == 0).count() / data.length;
   }
 
-  public static double sparsity(TensorCore tensor) {
+  public static double sparsity(CoreTensor tensor) {
     double[] data = tensor.dump();
     return (double) Arrays.stream(data).filter(d -> d == 0).count() / data.length;
   }

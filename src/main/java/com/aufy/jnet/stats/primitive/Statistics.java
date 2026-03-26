@@ -1,4 +1,4 @@
-package com.aufy.jnet.stats;
+package com.aufy.jnet.stats.primitive;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -6,13 +6,7 @@ import java.util.Map;
 
 import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
 
-/*
-there is like a grand total of 3 methods regularly used, the rest are fillers for a bygone version
-*/
 public class Statistics {
-
-  // double arrays
-
   public static double prod(double[] array) {
     double ans = 1;
     for (double n : array) ans *= n;

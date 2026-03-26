@@ -6,12 +6,12 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
-import com.aufy.jnet.tensor.core.impl.TensorCore;
+import com.aufy.jnet.tensor.core.impl.CoreTensor;
 
 public class Export {
-  public static void saveBinary(TensorCore tensor, String path) {
+  public static void saveBinary(CoreTensor tensor, String path) {
     try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(path))) {
-        int[] shape = tensor.getShape();
+        int[] shape = tensor.shape;
         double[] data = tensor.dump();
 
         dos.writeInt(shape.length); // Save Rank
@@ -23,7 +23,7 @@ public class Export {
     }
   }
 
-  public static TensorCore loadBinary(String path) {
+  public static CoreTensor loadBinary(String path) {
     try (DataInputStream dis = new DataInputStream(new FileInputStream(path))) {
       int rank = dis.readInt();
       int[] shape = new int[rank];
@@ -38,7 +38,7 @@ public class Export {
         data[i] = dis.readDouble();
       }
 
-      return new TensorCore(data, shape);
+      return new CoreTensor(data, shape);
     } catch (IOException e) {
       throw new RuntimeException("Import failed: " + e.getMessage());
     }

@@ -1,13 +1,14 @@
 package com.aufy.jnet.tensor.functional.main;
 
 import java.util.Arrays;
+
 import com.aufy.jnet.tensor.core.backend.compute.Engine;
 import com.aufy.jnet.tensor.core.backend.compute.Shaping;
 import com.aufy.jnet.tensor.core.backend.func.Binary;
-import com.aufy.jnet.tensor.core.impl.DataContainer;
+import com.aufy.jnet.tensor.core.impl.RawTensor;
 
 public class CoreBinaryOps {
-  public static DataContainer elementwise(DataContainer a, DataContainer b, Binary operation) {
+  public static RawTensor elementwise(RawTensor a, RawTensor b, Binary operation) {
     if (a.rank != b.rank) {
       throw new IllegalArgumentException("Mismatching rank for binary elementwise operation. Got tensors of rank " + a.rank + " and " + b.rank);
     }
@@ -19,10 +20,10 @@ public class CoreBinaryOps {
     }
 
     double[] resultData = Binary.apply(a.data, b.data, operation);
-    return new DataContainer(resultData, a.shape);
+    return new RawTensor(resultData, a.shape);
   }
 
-  public static DataContainer contract(DataContainer a, DataContainer b, int[] axesA, int[] axesB) {
+  public static RawTensor contract(RawTensor a, RawTensor b, int[] axesA, int[] axesB) {
     // if (axesA.length > a.rank) throw new IllegalArgumentException("Mismatching axes to contract Tensor A by, attempting to contract along " + axesA.length + " axes when Tensor A has a rank of " + a.rank );
     // if (axesB.length > b.rank) throw new IllegalArgumentException("Mismatching axes to contract Tensor B by, attempting to contract along " + axesB.length + " axes when Tensor A has a rank of " + b.rank);
 
@@ -35,7 +36,7 @@ public class CoreBinaryOps {
     int[] resShape = Shaping.calculateResShape(a.shape, b.shape, axesA, axesB);
     double[] resultData = Engine.contract(a.data, a.strides, b.data, b.strides, a.shape, axesA, b.shape, axesB, resShape);
 
-    return new DataContainer(resultData, resShape);
+    return new RawTensor(resultData, resShape);
   }
   
 }

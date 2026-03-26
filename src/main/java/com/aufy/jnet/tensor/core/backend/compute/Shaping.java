@@ -3,7 +3,7 @@ package com.aufy.jnet.tensor.core.backend.compute;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import com.aufy.jnet.stats.Statistics;
+import com.aufy.jnet.stats.primitive.Statistics;
 import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
 
 public class Shaping {

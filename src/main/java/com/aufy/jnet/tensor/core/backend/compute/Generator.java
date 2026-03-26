@@ -1,40 +1,14 @@
 package com.aufy.jnet.tensor.core.backend.compute;
 
 import java.util.Arrays;
-import java.util.Random;
-
-import com.aufy.jnet.stats.Statistics;
+import com.aufy.jnet.stats.primitive.Statistics;
 
 public class Generator {
-  private static final Random RANDOM = new Random();
-
-  public static double[] generateGaussian(int... shape) {
+  public static double[] fill(double value, int... shape) {
     int size = Statistics.prod(shape);
-
     double[] data = new double[size];
-    for (int i = 0; i < size; i++) {
-      data[i] = RANDOM.nextGaussian();
-    }
-    return data;
-  }
+    Arrays.fill(data, value);
 
-  public static double[] generateExponential(int... shape) {
-    int size = Statistics.prod(shape);
-
-    double[] data = new double[size];
-    for (int i = 0; i < size; i++) {
-      data[i] = RANDOM.nextExponential();
-    }
-    return data;
-  }
-
-  public static double[] generateUniform(int... shape) {
-    int size = Statistics.prod(shape);
-
-    double[] data = new double[size];
-    for (int i = 0; i < size; i++) {
-      data[i] = RANDOM.nextDouble();
-    }
     return data;
   }
 

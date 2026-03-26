@@ -3,8 +3,8 @@ package com.aufy.jnet.tensor.graph.main;
 import java.util.List;
 
 import com.aufy.jnet.tensor.core.backend.func.Unary;
-import com.aufy.jnet.tensor.core.impl.DataContainer;
-import com.aufy.jnet.tensor.core.impl.TensorCore;
+import com.aufy.jnet.tensor.core.impl.RawTensor;
+import com.aufy.jnet.tensor.core.impl.CoreTensor;
 import com.aufy.jnet.tensor.functional.main.CoreBinaryOps;
 import com.aufy.jnet.tensor.functional.main.CoreUnaryOps;
 
@@ -13,8 +13,8 @@ public class UnaryOps {
   // GENERIC
   // ==============================================================================================
 
-  public static TensorCore apply(TensorCore tensor, Unary operation, Unary derivative) {
-    TensorCore out = new TensorCore(CoreUnaryOps.apply(tensor.core, operation));
+  public static CoreTensor apply(CoreTensor tensor, Unary operation, Unary derivative) {
+    CoreTensor out = new CoreTensor(CoreUnaryOps.apply(tensor.core, operation));
 
     out.requiresGrad = tensor.requiresGrad;
 
@@ -22,9 +22,9 @@ public class UnaryOps {
       out.parents = List.of(tensor);
 
       out.derivative = (grad) -> {
-        DataContainer derivativeCore = CoreUnaryOps.apply(tensor.core, derivative);
-        DataContainer gradInputCore = CoreBinaryOps.elementwise(grad.core, derivativeCore, (a, b) -> a * b);
-        tensor.accumulate(new TensorCore(gradInputCore));
+        RawTensor derivativeCore = CoreUnaryOps.apply(tensor.core, derivative);
+        RawTensor gradInputCore = CoreBinaryOps.elementwise(grad.core, derivativeCore, (a, b) -> a * b);
+        tensor.accumulate(new CoreTensor(gradInputCore));
       };
     }
 
@@ -35,15 +35,15 @@ public class UnaryOps {
   // IMPLEMENTATION
   // ==============================================================================================
 
-  public static TensorCore add(TensorCore tensor, double scalar) {
+  public static CoreTensor add(CoreTensor tensor, double scalar) {
     return apply(tensor, (a) -> a + scalar, (a) -> 1.0);
   }
 
-  public static TensorCore mul(TensorCore tensor, double scalar) {
+  public static CoreTensor mul(CoreTensor tensor, double scalar) {
     return apply(tensor, (a) -> a * scalar, (a) -> scalar);
   }
   
-  public static TensorCore pow(TensorCore tensor, double scalar) {
+  public static CoreTensor pow(CoreTensor tensor, double scalar) {
     return apply(tensor, (a) -> Math.pow(a, scalar), (a) -> scalar * Math.pow(a, scalar - 1.0));
   }
 }

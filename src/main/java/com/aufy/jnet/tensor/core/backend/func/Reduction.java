@@ -1,5 +1,5 @@
 package com.aufy.jnet.tensor.core.backend.func;
-import com.aufy.jnet.stats.Statistics;
+import com.aufy.jnet.stats.primitive.Statistics;
 import com.aufy.jnet.tensor.core.backend.compute.PointerLogic;
 import com.aufy.jnet.tensor.core.backend.compute.Shaping;
 

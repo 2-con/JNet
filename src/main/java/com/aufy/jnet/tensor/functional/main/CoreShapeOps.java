@@ -3,14 +3,13 @@ package com.aufy.jnet.tensor.functional.main;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import com.aufy.jnet.stats.Statistics;
+import com.aufy.jnet.stats.primitive.Statistics;
 import com.aufy.jnet.tensor.core.backend.compute.Engine;
 import com.aufy.jnet.tensor.core.backend.compute.Shaping;
-import com.aufy.jnet.tensor.core.backend.util.ArrayTools;
-import com.aufy.jnet.tensor.core.impl.DataContainer;
+import com.aufy.jnet.tensor.core.impl.RawTensor;
 
 public class CoreShapeOps {
-  public static DataContainer permute(DataContainer tensor, int... newOrder) {
+  public static RawTensor permute(RawTensor tensor, int... newOrder) {
     ArrayList<Integer> indices = new ArrayList<>();
     
     for (int i = 0; i < newOrder.length; i++) {
@@ -40,10 +39,10 @@ public class CoreShapeOps {
       newStrides[i] = tensor.strides[newOrder[i]];
     }
     
-    return new DataContainer(tensor.data, newDims, newStrides);
+    return new RawTensor(tensor.data, newDims, newStrides);
   }
   
-  public static DataContainer broadcast(DataContainer tensor, int... targetShape) {
+  public static RawTensor broadcast(RawTensor tensor, int... targetShape) {
     if (java.util.Arrays.equals(tensor.shape, targetShape)) {
       return tensor;
     }
@@ -60,24 +59,24 @@ public class CoreShapeOps {
     }
     
     double[] broadcastedData = Engine.broadcast(tensor.data, tensor.shape, targetShape);
-    return new DataContainer(broadcastedData, targetShape);
+    return new RawTensor(broadcastedData, targetShape);
   }
   
-  public static DataContainer squeeze(DataContainer tensor) {
-    return new DataContainer(tensor.data, Shaping.squeezeShape(tensor.shape));
+  public static RawTensor squeeze(RawTensor tensor) {
+    return new RawTensor(tensor.data, Shaping.squeezeShape(tensor.shape));
   }
   
-  public static DataContainer unsqueeze(DataContainer tensor, int... axes) {
+  public static RawTensor unsqueeze(RawTensor tensor, int... axes) {
     for (int axis : axes) {
       if (axis < 0 || axis >= tensor.shape.length) {
         throw new IllegalArgumentException("Unsqueeze axes out of bounds: attempted to expand dimensions along axis " + axis);
       }
     }
     
-    return new DataContainer(tensor.data, Shaping.unsqueezeShape(tensor.shape, axes));
+    return new RawTensor(tensor.data, Shaping.unsqueezeShape(tensor.shape, axes));
   }
   
-  public static DataContainer reshape(DataContainer tensor, int... shape) {
+  public static RawTensor reshape(RawTensor tensor, int... shape) {
     if (tensor.size != Statistics.prod(shape)) {
       throw new IllegalArgumentException("Insufficient elements to reshape tensor of shape " + Arrays.toString(tensor.shape) + " (size " + tensor.size + ") into a tensor of shape " + Arrays.toString(shape) + " (size " + tensor.size + ")");
     }
@@ -97,81 +96,75 @@ public class CoreShapeOps {
     
     int[] newShape = Shaping.inferShape(tensor.shape, shape);
     
-    return new DataContainer(tensor.data, newShape);
+    return new RawTensor(tensor.data, newShape);
   }
   
-  public static DataContainer concat(int axis, DataContainer... tensors) {
+  public static RawTensor concat(int axis, RawTensor... tensors) {
     int rankRef = tensors[0].rank;
     int[] shapeRef = tensors[0].shape;
-    for (DataContainer tensor : tensors) {
-      if (tensor.rank != rankRef) {
-        throw new IllegalArgumentException("Mismatching rank for concatenation, attempting to concatenate tensors of rank " + rankRef + " and " + tensor.rank);
-      }
-      for (int i = 0; i < tensor.rank; i++) {
-        if (shapeRef[i] != tensor.shape[i] && i != axis) {
-          throw new IllegalArgumentException("Mismatching shape at axis " + i + " for concatenation; attempting to concatenate tensors of shape " + Arrays.toString(shapeRef) + " and " + Arrays.toString(tensor.shape));
-        }
-      }
-      if (axis + 1 > tensor.rank) {
-        throw new IllegalArgumentException("Invalid axis " + axis + " for concatenation when one of the tensor has rank " + tensor.rank);
-      }
+    for (RawTensor tensor : tensors) {
+      if (tensor.rank != rankRef) throw new IllegalArgumentException("Mismatching tensor rank for concatenation when the first tensor listed for concatenation has a rank of " + rankRef);
+      if (axis >= tensor.rank) throw new IllegalArgumentException("Concatenation axis out of bounds; tensor of rank " + tensor.rank + " cannot be concatenated along axis " + axis);
+
+      for (int i = 0; i < rankRef; i++) if (i != axis && shapeRef[i] != tensor.shape[i]) throw new IllegalArgumentException("Mismatching dimension at axis " + i + " when concatenating tensors of shape " + Arrays.toString(shapeRef) + " and " + Arrays.toString(tensor.shape));
     }
 
-    int[] firstShape = tensors[0].getShape();
-    int[] newShape = firstShape.clone();
-    
+    int[][] shapes = new int[tensors.length][];
+    double[][] dataList = new double[tensors.length][];
+    int[] resShape = tensors[0].shape.clone();
     int totalAxisDim = 0;
-    for (DataContainer dc : tensors) totalAxisDim += dc.getShape()[axis];
-    newShape[axis] = totalAxisDim;
 
-    double[] newData = new double[ArrayTools.prod(newShape)];
-    
-    int outerCount = 1;
-    for (int i = 0; i < axis; i++) outerCount *= newShape[i];
-    
-    int innerSize = 1;
-    for (int i = axis + 1; i < newShape.length; i++) innerSize *= newShape[i];
-
-    int currentAxisOffset = 0;
-    for (DataContainer dc : tensors) {
-      double[] srcData = dc.dump();
-      int srcAxisDim = dc.getShape()[axis];
-
-      for (int o = 0; o < outerCount; o++) {
-        int destPos = (o * totalAxisDim * innerSize) + (currentAxisOffset * innerSize);
-        int srcPos = o * srcAxisDim * innerSize;
-
-        System.arraycopy(srcData, srcPos, newData, destPos, srcAxisDim * innerSize);
-      }
-      currentAxisOffset += srcAxisDim;
-    }
-
-    return new DataContainer(newData, newShape);
-  }
-  
-  public static DataContainer stack(int axis, DataContainer... tensors) {
-    int[] oldShape = tensors[0].getShape();
-    int[] expandedShape = new int[oldShape.length + 1];
-    
-    for (int i = 0, j = 0; i < expandedShape.length; i++) {
-      if (i == axis) {
-        expandedShape[i] = tensors.length;
-      } else {
-        expandedShape[i] = oldShape[j++];
-      }
-    }
-
-    DataContainer[] expandedTensors = new DataContainer[tensors.length];
-    int[] dummyShape = oldShape.clone();
-    
     for (int i = 0; i < tensors.length; i++) {
-      expandedTensors[i] = new DataContainer(tensors[i].dump(), dummyShape);
+      shapes[i] = tensors[i].shape;
+      dataList[i] = tensors[i].dump();
+      totalAxisDim += shapes[i][axis];
+    }
+    resShape[axis] = totalAxisDim;
+
+    double[] resultData = Engine.concat(axis, shapes, dataList, resShape);
+
+    return new RawTensor(resultData, resShape);
+  }
+
+  public static RawTensor stack(int axis, RawTensor... tensors) {
+    int rankRef = tensors[0].rank;
+    int[] refShape = tensors[0].shape;
+    for (RawTensor tensor : tensors) {
+      if (tensor.rank != rankRef) throw new IllegalArgumentException("Mismatching tensor rank for concatenation when the first tensor listed for concatenation has a rank of" + rankRef);
+
+      for (int i = 0; i < rankRef; i++) if (tensor.shape[i] != refShape[i]) throw new IllegalArgumentException("Mismatching dimension for stacking tensors: all tensors must have the same shape");
     }
 
-    return concat(axis, expandedTensors);
+    int[] oldShape = tensors[0].shape;
+    int[] resShape = new int[oldShape.length + 1];
+    for (int i = 0, j = 0; i < resShape.length; i++) {
+      if (i == axis) resShape[i] = tensors.length;
+      else resShape[i] = oldShape[j++];
+    }
+
+    double[][] dataList = new double[tensors.length][];
+    for (int i = 0; i < tensors.length; i++) {
+      dataList[i] = tensors[i].dump();
+    }
+
+    double[] resultData = Engine.stack(axis, dataList, resShape);
+
+    return new RawTensor(resultData, resShape);
   }
 
-  public static DataContainer slice(DataContainer tensor, int axis) {
-    return null;
+  public static RawTensor slice(RawTensor tensor, int axis, int index) {
+    if (index < 0 || index >= tensor.shape[axis]) {
+      throw new IndexOutOfBoundsException("Invalid index to slice tensor along axis " + axis + ": " + index + " out of bounds for axis ");
+    }
+
+    int[] newShape = new int[tensor.rank - 1];
+    for (int i = 0, k = 0; i < tensor.rank; i++) {
+      if (i != axis) newShape[k++] = tensor.shape[i];
+    }
+
+    double[] resultData = Engine.slice(tensor.data, tensor.shape, tensor.strides, axis, index);
+
+    return new RawTensor(resultData, newShape);
   }
+
 }

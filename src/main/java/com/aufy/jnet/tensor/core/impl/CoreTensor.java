@@ -12,24 +12,24 @@ import java.util.stream.IntStream;
 import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
 import com.aufy.jnet.tensor.graph.init.TensorCoreGenerator;
 
-public class TensorCore implements Traceable{
+public class CoreTensor{
   public static boolean verbose = false;
   public final int rank;
   public final int size;
   public final int[] shape; // prevents array switching but does not prevent direct modifications
   public boolean requiresGrad;
-  public TensorCore grad;
+  public CoreTensor grad;
   
-  public final DataContainer core;
-  public List<TensorCore> parents = new ArrayList<>();
-  public Consumer<TensorCore> derivative;
+  public final RawTensor core;
+  public List<CoreTensor> parents = new ArrayList<>();
+  public Consumer<CoreTensor> derivative;
   public int[] allAxes;
   
-  public TensorCore(double[] data, int... shape) {
-    this(new DataContainer(data, shape));
+  public CoreTensor(double[] data, int... shape) {
+    this(new RawTensor(data, shape));
   }
 
-  public TensorCore(DataContainer core) {
+  public CoreTensor(RawTensor core) {
     this.core = core;
     this.requiresGrad = false;
     this.shape = core.getShape();
@@ -42,28 +42,22 @@ public class TensorCore implements Traceable{
   //                                                  UTILITY                                                    //
   // ########################################################################################################### //
 
-  @Override public List<TensorCore> getParents() { return Collections.unmodifiableList(this.parents); }
-  @Override public int[] getShape() { return this.shape.clone(); }
-  @Override public Consumer<TensorCore> getGradFunc() { return this.derivative; }
-
-  public TensorCore detach() {return detach(this);}
-  public static TensorCore detach(TensorCore tensor) {
-    TensorCore out = new TensorCore(tensor.core);
+  public static CoreTensor detach(CoreTensor tensor) {
+    CoreTensor out = new CoreTensor(tensor.core);
     out.requiresGrad = false;
     return out;
   }
   
-  public TensorCore clone() {return TensorCore.clone(this);}
-  public static TensorCore clone(TensorCore tensor) {
-    return new TensorCore(tensor.dump(), tensor.shape);
+  public static CoreTensor clone(CoreTensor tensor) {
+    return new CoreTensor(tensor.dump(), tensor.shape);
   }
 
   public double[] dump() {
     return this.core.dump();
   }
 
-  public TensorCore noGrad() {return noGrad(this);}
-  public static TensorCore noGrad(TensorCore tensor) {
+  public CoreTensor noGrad() {return noGrad(this);}
+  public static CoreTensor noGrad(CoreTensor tensor) {
     tensor.requiresGrad = false;
     tensor.parents = null;
     tensor.derivative = null;
@@ -90,7 +84,7 @@ public class TensorCore implements Traceable{
     }
   }
 
-  private void addInPlace(DataContainer other) {
+  private void addInPlace(RawTensor other) {
     if (this.dump().length != other.dump().length) {
       throw new IllegalArgumentException("Internal data size mismatch for in-place add.");
     }
@@ -104,17 +98,17 @@ public class TensorCore implements Traceable{
   //                                              AUTOGRAD LOGIC                                                 //
   // ########################################################################################################### //
 
-  public void zeroGrad() {TensorCore.zeroGrad(this);}
-  public static void zeroGrad(TensorCore tensor) {
-    List<TensorCore> nodes = buildGraph(tensor);
-    for (TensorCore node : nodes) {
+  public void zeroGrad() {CoreTensor.zeroGrad(this);}
+  public static void zeroGrad(CoreTensor tensor) {
+    List<CoreTensor> nodes = buildGraph(tensor);
+    for (CoreTensor node : nodes) {
       if (node.grad != null) {
         java.util.Arrays.fill(node.grad.core.rawData(), 0.0);
       }
     }
   }
 
-  public void accumulate(TensorCore incomingGrad) {
+  public void accumulate(CoreTensor incomingGrad) {
     if (!this.requiresGrad) return;
     
     if (this.grad == null) {
@@ -125,9 +119,9 @@ public class TensorCore implements Traceable{
     this.grad.addInPlace(incomingGrad.core);
   }
 
-  public static List<TensorCore> buildGraph(TensorCore root) {
-    List<TensorCore> order = new ArrayList<>();
-    Set<TensorCore> visited = new HashSet<>();
+  public static List<CoreTensor> buildGraph(CoreTensor root) {
+    List<CoreTensor> order = new ArrayList<>();
+    Set<CoreTensor> visited = new HashSet<>();
     
     visit(root, visited, order);
     
@@ -136,12 +130,12 @@ public class TensorCore implements Traceable{
     return order;
   }
 
-  private static void visit(TensorCore node, Set<TensorCore> visited, List<TensorCore> order) {
+  private static void visit(CoreTensor node, Set<CoreTensor> visited, List<CoreTensor> order) {
     if (node == null || visited.contains(node)) return;
     
     visited.add(node);
     if (node.parents != null) {
-      for (TensorCore parent : node.parents) {
+      for (CoreTensor parent : node.parents) {
         visit(parent, visited, order);
       }
     }
@@ -163,9 +157,9 @@ public class TensorCore implements Traceable{
       java.util.Arrays.fill(this.grad.core.rawData(), 1.0);
     }
 
-    List<TensorCore> order = buildGraph(this);
+    List<CoreTensor> order = buildGraph(this);
 
-    for (TensorCore node : order) {
+    for (CoreTensor node : order) {
       if (node.derivative != null && node.grad != null) {
         node.derivative.accept(node.grad);
       }
