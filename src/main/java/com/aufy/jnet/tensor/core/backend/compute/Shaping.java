@@ -68,18 +68,12 @@ public class Shaping {
       int dimA = (i >= rank - a.length) ? a[i - (rank - a.length)] : 1;
       int dimB = (i >= rank - b.length) ? b[i - (rank - b.length)] : 1;
 
-      if (dimA != dimB && dimA != 1 && dimB != 1) throw new IllegalArgumentException("Mismatching shapes for broadcasting");
-
       result[i] = Math.max(dimA, dimB);
     }
     return result;
   }
   
   public static int[] squeezeShape(int[] shape) {
-    if (shape.length == 0) {
-      throw new IllegalArgumentException("Insufficient rank to trim: got Tensor of rank " + shape.length);
-    }
-
     ArrayList<Integer> newShape = new ArrayList<>();
     
     for (int axis : shape) {
@@ -124,10 +118,6 @@ public class Shaping {
       if (workingShape[i] == -1) {
         workingShape[i] = Statistics.prod(oldShape) / (-1 * Statistics.prod(newShape));
       }
-    }
-
-    if (Statistics.prod(workingShape) != Statistics.prod(oldShape)) {
-      throw new IllegalArgumentException("Mismatching sizes between old shape " + Arrays.toString(oldShape) + " and new shape " + Arrays.toString(workingShape) + ": cannot infer shape with the given restrictions");
     }
 
     return workingShape;

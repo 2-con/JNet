@@ -10,21 +10,15 @@ public class RawTensor {
   currently, Engine creates and allocate a new double[] every operation. although its fine, its better if there is a global pool to reuse memory
   and space. also, engine should also be purely functional without making any new double[]; rawtensor is fully responsible for memory stuff.
   */
+
+  // these fineals wont do anything for these arrays
   public final double[] data;
   public final int[] shape;
-  public final int rank;
-
-  public final int size;
   public final int[] strides;
+  public final int rank;
+  public final int size;
   
   public RawTensor(double[] data, int... shape) {
-    int expectedSize = 1;
-    for (int d : shape) expectedSize *= d;
-
-    if (data.length != expectedSize) {
-      throw new IllegalArgumentException("Tensor of size " + data.length + " cannot be shaped to " + Arrays.toString(shape));
-    }
-
     this.data = data.clone();
     this.shape = shape.clone();
     this.strides = PointerLogic.calculateStrides(shape);
@@ -33,16 +27,9 @@ public class RawTensor {
   }
 
   public RawTensor(double[] data, int[] shape, int[] strides) {
-    int expectedSize = 1;
-    for (int d : shape) expectedSize *= d;
-
-    if (data.length != expectedSize) {
-      throw new IllegalArgumentException("Tensor of size " + data.length + " cannot be shaped to " + Arrays.toString(shape));
-    }
-
     this.data = data.clone();
     this.shape = shape.clone();
-    this.strides = strides.clone(); // this constructor is private anyways, but just to make sure nothing silly happens
+    this.strides = strides.clone(); // backend is private anyways, but just to make sure nothing silly happens
     this.rank = this.shape.length;
     this.size = this.data.length;
   }
@@ -65,10 +52,6 @@ public class RawTensor {
   }
 
   public double get(int... indices) {
-    if (indices.length != this.rank) {
-      throw new IllegalArgumentException("Invalid number of indices");
-    }
-
     return this.data[PointerLogic.getIndex(this.strides, indices)];
   }
 

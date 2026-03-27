@@ -32,19 +32,6 @@ public class ShapeOps {
   }
 
   public static CoreTensor reshape(CoreTensor tensor, int... shape) {
-    int countNegatives = 0;
-    for (int n : shape) {
-      if (n < -1) {
-        throw new IllegalArgumentException("Dimension inference only works on -1, got " + n + " instead");
-      }
-      if (n == -1) {
-        countNegatives++;
-      }
-      if (countNegatives > 1) {
-        throw new IllegalArgumentException("Only one dimension can be inferred, got " + countNegatives + " dimensions to infer");
-      }
-    }
-
     int[] newShape = Shaping.inferShape(tensor.shape, shape);
     CoreTensor out = new CoreTensor(CoreShapeOps.reshape(tensor.core, newShape));
     out.requiresGrad = tensor.requiresGrad;

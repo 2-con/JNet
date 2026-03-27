@@ -1,10 +1,10 @@
 package com.aufy.jnet.tensor.core.backend.compute;
 
-import com.aufy.jnet.stats.primitive.Statistics;
+import com.aufy.jnet.tensor.core.backend.util.ArrayTools;
 
 public class Engine {
   public static double[] transformData(double[] gradOutput, int[] gradShape, int[] inputShape) {
-    double[] result = new double[Statistics.prod(inputShape)];
+    double[] result = new double[ArrayTools.prod(inputShape)];
     int[] inputStrides = PointerLogic.calculateStrides(inputShape);
     int[] gradStrides  = PointerLogic.calculateStrides(gradShape);
 
@@ -25,7 +25,7 @@ public class Engine {
   }
 
   public static double[] broadcast(double[] data, int[] srcShape, int[] targetShape) {
-    int targetSize = Statistics.prod(targetShape);
+    int targetSize = ArrayTools.prod(targetShape);
     int[] srcStrides = PointerLogic.calculateStrides(srcShape);
     int[] targetStrides = PointerLogic.calculateStrides(targetShape);
     
@@ -49,10 +49,10 @@ public class Engine {
   }
 
   public static double[] contract(double[] dataA, int[] stridesA, double[] dataB, int[] stridesB, int[] shapeA, int[] axesA, int[] shapeB, int[] axesB, int[] resShape) {
-    double[] resData = new double[Statistics.prod(resShape)];
+    double[] resData = new double[ArrayTools.prod(resShape)];
     
     int[] subShape = Shaping.getSubShape(shapeA, axesA);
-    int contractVolume = Statistics.prod(subShape);
+    int contractVolume = ArrayTools.prod(subShape);
     
     int[] kOffsetsA = Shaping.precomputeKOffsets(subShape, axesA, stridesA);
     int[] kOffsetsB = Shaping.precomputeKOffsets(subShape, axesB, stridesB);
@@ -76,7 +76,7 @@ public class Engine {
   }
 
   public static double[] reduceSum(double[] gradData, int[] gradShape, int[] origShape) {
-    double[] reduced = new double[Statistics.prod(origShape)];
+    double[] reduced = new double[ArrayTools.prod(origShape)];
     int[] gradStrides = PointerLogic.calculateStrides(gradShape);
     int[] origStrides = PointerLogic.calculateStrides(origShape);
 
@@ -97,7 +97,7 @@ public class Engine {
   }
 
   public static double[] concat(int axis, int[][] shapes, double[][] dataList, int[] resultShape) {
-    double[] out = new double[Statistics.prod(resultShape)];
+    double[] out = new double[ArrayTools.prod(resultShape)];
     
     int totalAxisDim = resultShape[axis];
     int outerCount = 1;
@@ -127,7 +127,7 @@ public class Engine {
     // In a contiguous model, stacking N tensors of size M is 
     // identical to a single concat or a bulk copy if the inputs 
     // are already contiguous.
-    double[] out = new double[Statistics.prod(resultShape)];
+    double[] out = new double[ArrayTools.prod(resultShape)];
     int tensorSize = out.length / dataList.length;
     
     for (int i = 0; i < dataList.length; i++) {
@@ -145,11 +145,11 @@ public class Engine {
       if (i != axis) newShape[k++] = shape[i];
     }
 
-    double[] out = new double[Statistics.prod(newShape)];
+    double[] out = new double[ArrayTools.prod(newShape)];
     
     int sliceStride = strides[axis];
     // how many times the sliced dimension repeats in the heap
-    int outerIterations = (axis == 0) ? 1 : Statistics.prod(shape) / (shape[axis] * sliceStride);
+    int outerIterations = (axis == 0) ? 1 : ArrayTools.prod(shape) / (shape[axis] * sliceStride);
     
     int currentPos = 0;
     for (int i = 0; i < outerIterations; i++) {
@@ -167,10 +167,10 @@ public class Engine {
     int[] newShape = shape.clone();
     newShape[axis] = rangeDim;
     
-    double[] out = new double[Statistics.prod(newShape)];
+    double[] out = new double[ArrayTools.prod(newShape)];
     
     int sliceStride = strides[axis];
-    int outerIterations = (axis == 0) ? 1 : Statistics.prod(shape) / (shape[axis] * sliceStride);
+    int outerIterations = (axis == 0) ? 1 : ArrayTools.prod(shape) / (shape[axis] * sliceStride);
     
     int currentPos = 0;
     for (int i = 0; i < outerIterations; i++) {
@@ -186,7 +186,7 @@ public class Engine {
 
   public static void place(double[] src, double[] dest, int[] destShape, int[] destStrides, int axis, int index) {
     int sliceStride = destStrides[axis];
-    int outerIterations = (axis == 0) ? 1 : Statistics.prod(destShape) / (destShape[axis] * sliceStride);
+    int outerIterations = (axis == 0) ? 1 : ArrayTools.prod(destShape) / (destShape[axis] * sliceStride);
     
     int srcPos = 0;
     for (int i = 0; i < outerIterations; i++) {

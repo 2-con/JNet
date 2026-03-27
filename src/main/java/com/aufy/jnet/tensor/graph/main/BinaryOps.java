@@ -16,10 +16,6 @@ public class BinaryOps {
   // ==============================================================================================
   
   public static CoreTensor elementwise(CoreTensor tensorA, CoreTensor tensorB, Binary op, Binary dA, Binary dB) {
-    if (tensorA.rank != tensorB.rank) {
-      throw new IllegalArgumentException("Mismatching rank for binary elementwise operation. Got tensors of rank " + tensorA.rank + " and " + tensorB.rank);
-    }
-    
     int[] broadcastShapeTarget = Shaping.broadcastedShape(tensorA.shape, tensorB.shape);
     
     RawTensor coreA = CoreShapeOps.broadcast(tensorA.core, broadcastShapeTarget);

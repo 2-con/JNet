@@ -88,6 +88,7 @@ public class CoreTensor{
     if (this.dump().length != other.dump().length) {
       throw new IllegalArgumentException("Internal data size mismatch for in-place add.");
     }
+    
     // Perform raw array addition without creating a new result array
     for (int i = 0; i < this.dump().length; i++) {
       this.core.rawData()[i] += other.rawData()[i];
@@ -143,14 +144,6 @@ public class CoreTensor{
   }
 
   public void backward() {
-    if (!this.requiresGrad) {
-      throw new IllegalStateException(".backward() cannot be called on a tensor that does not require gradients");
-    } 
-
-    if (this.parents == null && this.derivative == null) {
-      throw new IllegalStateException("This tensor is the result of a non-differentiable operation");
-    }
-
     if (this.grad == null) {
       this.grad = TensorCoreGenerator.onesLike(this);
     } else {
