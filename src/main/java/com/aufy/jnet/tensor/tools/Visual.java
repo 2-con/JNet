@@ -4,12 +4,17 @@ import java.util.Arrays;
 
 import com.aufy.jnet.stats.primitive.Statistics;
 import com.aufy.jnet.tensor.core.backend.compute.PointerLogic;
-import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
+import com.aufy.jnet.tensor.core.backend.util.ArrayTools;
 import com.aufy.jnet.tensor.core.impl.CoreTensor;
 
 public class Visual {
+  /*
+  actually make it look nice. note that the essentials (printing raw arrays) should be moved to arrayops bc this should be
+  completely isolated. 
+  */
+
   public static void print(double[] array, int[] shape) { // don't ever use this for internal printing: use ArraOps in core/backend/util instead 
-    System.out.println(ArrayOps.print(array, shape, PointerLogic.calculateStrides(shape), 0, 0, 0));
+    System.out.println(ArrayTools.print(array, shape, PointerLogic.calculateStrides(shape), 0, 0, 0));
   }
 
   public static void trace(CoreTensor tensor) {
@@ -29,7 +34,7 @@ public class Visual {
       System.out.println("Tensor" + shape + operation);
     }
 
-    // 2. Recurse into parents
+    // BFS over parents
     if (node.parents != null) {
       for (int i = 0; i < node.parents.size(); i++) {
         boolean lastChild = (i == node.parents.size() - 1);

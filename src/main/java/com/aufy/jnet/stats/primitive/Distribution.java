@@ -3,14 +3,14 @@ package com.aufy.jnet.stats.primitive;
 import java.util.Random;
 
 public interface Distribution {
-  private static final Random RANDOM = new Random();
+  public static Random generator = new Random();
 
   public static double[] generateGaussian(int... shape) {
     int size = Statistics.prod(shape);
 
     double[] data = new double[size];
     for (int i = 0; i < size; i++) {
-      data[i] = RANDOM.nextGaussian();
+      data[i] = generator.nextGaussian();
     }
     return data;
   }
@@ -20,7 +20,7 @@ public interface Distribution {
 
     double[] data = new double[size];
     for (int i = 0; i < size; i++) {
-      data[i] = RANDOM.nextExponential();
+      data[i] = generator.nextExponential();
     }
     return data;
   }
@@ -30,7 +30,7 @@ public interface Distribution {
 
     double[] data = new double[size];
     for (int i = 0; i < size; i++) {
-      data[i] = RANDOM.nextDouble();
+      data[i] = generator.nextDouble();
     }
     return data;
   }

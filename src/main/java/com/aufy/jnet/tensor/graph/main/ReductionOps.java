@@ -1,13 +1,20 @@
 package com.aufy.jnet.tensor.graph.main;
 
+import java.util.Arrays;
 import java.util.List;
 
 import com.aufy.jnet.tensor.core.backend.compute.Engine;
 import com.aufy.jnet.tensor.core.backend.func.Reduction;
+import com.aufy.jnet.tensor.core.backend.util.ArrayTools;
 import com.aufy.jnet.tensor.core.impl.CoreTensor;
+import com.aufy.jnet.tensor.core.impl.RawTensor;
 import com.aufy.jnet.tensor.functional.main.CoreReductionOps;
 
 public class ReductionOps {
+  /*
+  dont go overboard with the additions, Tensor will do the job. just add the core stuff and Tensor will do the rest
+  */
+  
   public static CoreTensor reduce(CoreTensor tensor, Reduction operation, int... axes) {
     return new CoreTensor(CoreReductionOps.reduce(tensor.core, operation, axes)).noGrad();
   }
@@ -21,7 +28,7 @@ public class ReductionOps {
       out.parents = List.of(input);
 
       out.derivative = (grad) -> {
-        double[] gradInput = Engine.transformData(grad.dump(), grad.shape, input.shape);
+        double[] gradInput = Engine.broadcast(grad.dump(), grad.shape, input.shape);
         input.accumulate(new CoreTensor(gradInput, input.shape));
       };
     }
@@ -29,7 +36,6 @@ public class ReductionOps {
     return out;
   }
 
-  // FIXME: prod is wrong: 1 zero = all grads go here, 2+ zeros = no grad. currently if there are any zeros, NaNs will happen bc 1/0
   public static CoreTensor prod(CoreTensor tensor, int... axes) {
     CoreTensor out = new CoreTensor(CoreReductionOps.reduce(tensor.core, ReductionOps::prod, axes));
 
@@ -39,14 +45,34 @@ public class ReductionOps {
       out.parents = List.of(tensor);
 
       out.derivative = (grad) -> {
-        double[] gradExpanded = Engine.transformData(grad.dump(), grad.shape, tensor.shape);
-        double[] yExpanded = Engine.transformData(out.core.dump(), out.shape, tensor.shape);
+        double[] expandedGrads = Engine.broadcast(grad.dump(), grad.shape, tensor.shape);
+        double[] expandedOutput = Engine.broadcast(out.core.dump(), out.shape, tensor.shape);
 
         double[] xData = tensor.dump();
         double[] gradInput = new double[tensor.size];
 
-        for (int i = 0; i < gradInput.length; i++) {
-          gradInput[i] = gradExpanded[i] * (yExpanded[i] / xData[i]);
+        // if there are more than 1 0s, there is no gradient
+        if (ArrayTools.countContains(xData, 0) > 1) {
+          Arrays.fill(gradInput, 0.0);
+
+        } else if (ArrayTools.countContains(xData, 0) == 1) {
+          double prodNonZeros = 1;
+
+          for (int i = 0; i < xData.length; i++) {
+            if (xData[i] != 0) {
+              prodNonZeros *= xData[i];
+            }
+          }
+
+          int zeroIndex = ArrayTools.indexOf(xData, 0);
+          Arrays.fill(gradInput, 0.0);
+
+          gradInput[zeroIndex] = expandedGrads[zeroIndex] * prodNonZeros;
+          
+        } else {
+          for (int i = 0; i < gradInput.length; i++) {
+            gradInput[i] = expandedGrads[i] * (expandedOutput[i] / xData[i]);
+          }
         }
 
         tensor.accumulate(new CoreTensor(gradInput, tensor.shape));
@@ -56,7 +82,6 @@ public class ReductionOps {
     return out;
   }
 
-  // FIXME:  min and max grads are still wrong: they both assume global reduction when its not guaranteed
   public static CoreTensor max(CoreTensor tensor, int... axes) {
     CoreTensor out = new CoreTensor(CoreReductionOps.reduce(tensor.core, ReductionOps::max, axes));
 
@@ -66,15 +91,32 @@ public class ReductionOps {
       out.parents = List.of(tensor);
 
       out.derivative = (grad) -> {
-        double[] gradExpanded = Engine.transformData(grad.dump(), grad.shape, tensor.shape);
-        double[] yExpanded = Engine.transformData(out.core.dump(), out.shape, tensor.shape);
+        double[] expandedGrads = Engine.broadcast(grad.dump(), grad.shape, tensor.shape);
+        double[] expandedOutput = Engine.broadcast(out.core.dump(), out.shape, tensor.shape);
 
         double[] xData = tensor.dump();
         double[] gradInput = new double[tensor.size];
 
-        int count = 0;
-        for (double n: xData) count += (n == yExpanded[0]) ? 1 : 0;
-        for (int i = 0; i < gradInput.length; i++) gradInput[i] = (xData[i] == yExpanded[i]) ? gradExpanded[i] / count : 0;
+        double[] mask = new double[tensor.size];
+        for (int i = 0; i < xData.length; i++) {
+          mask[i] = (xData[i] == expandedOutput[i]) ? 1.0 : 0.0; // check if its max, if so, mask 1, else 0
+        }
+
+        RawTensor countsRaw = CoreReductionOps.reduce(new RawTensor(mask, tensor.shape), ReductionOps::sum, axes);
+        double[] expandedCounts = Engine.broadcast(countsRaw.dump(), countsRaw.getShape(), tensor.shape);
+
+        // distribute gradients
+        for (int i = 0; i < gradInput.length; i++) {
+          if (mask[i] > 0) {
+            gradInput[i] = expandedGrads[i] / expandedCounts[i];
+          } else {
+            gradInput[i] = 0;
+          }
+        }
+
+        // int count = 0;
+        // for (double n: xData) count += (n == expandedOutput[0]) ? 1 : 0;
+        // for (int i = 0; i < gradInput.length; i++) gradInput[i] = (xData[i] == expandedOutput[i]) ? expandedGrads[i] / count : 0;
 
         tensor.accumulate(new CoreTensor(gradInput, tensor.shape));
       };
@@ -92,16 +134,28 @@ public class ReductionOps {
       out.parents = List.of(tensor);
 
       out.derivative = (grad) -> {
-        double[] gradExpanded = Engine.transformData(grad.dump(), grad.shape, tensor.shape);
-        double[] yExpanded = Engine.transformData(out.core.dump(), out.shape, tensor.shape);
+        double[] expandedGrads = Engine.broadcast(grad.dump(), grad.shape, tensor.shape);
+        double[] expandedOutput = Engine.broadcast(out.core.dump(), out.shape, tensor.shape);
 
         double[] xData = tensor.dump();
         double[] gradInput = new double[tensor.size];
 
-        int count = 0;
-        for (double n: xData) count += (n == yExpanded[0]) ? 1 : 0;
-        for (int i = 0; i < gradInput.length; i++) gradInput[i] = (xData[i] == yExpanded[i]) ? gradExpanded[i] / count : 0;
+        double[] mask = new double[tensor.size];
+        for (int i = 0; i < xData.length; i++) {
+          mask[i] = (xData[i] == expandedOutput[i]) ? 1.0 : 0.0; // check if min, if so, mask 1, else 0
+        }
 
+        RawTensor countsRaw = CoreReductionOps.reduce(new RawTensor(mask, tensor.shape), ReductionOps::sum, axes);
+        double[] expandedCounts = Engine.broadcast(countsRaw.dump(), countsRaw.getShape(), tensor.shape);
+
+        // distribute gradients
+        for (int i = 0; i < gradInput.length; i++) {
+          if (mask[i] > 0) {
+            gradInput[i] = expandedGrads[i] / expandedCounts[i];
+          } else {
+            gradInput[i] = 0;
+          }
+        }
         tensor.accumulate(new CoreTensor(gradInput, tensor.shape));
       };
     }

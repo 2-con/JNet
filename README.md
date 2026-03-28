@@ -1,7 +1,7 @@
-<!-- <p align="center" style="font-size:70px">
-  <img width="1047" height="226" alt="Screenshot 2025-08-14 211650" src="https://github.com/user-attachments/assets/e4388a71-a6ef-4f0a-be2c-58796424c64f" />
-  <b>JXNet</b>
-</p> -->
+<p align="center" style="font-size:70px">
+  <img width="1047" height="226" alt="Screenshot 2025-08-14 211650" src="src\main\resources\image.png" />
+  <b>JNet</b>
+</p>
 
 # **JNet** 🧠
 

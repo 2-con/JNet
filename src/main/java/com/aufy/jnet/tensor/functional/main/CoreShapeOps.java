@@ -5,6 +5,10 @@ import com.aufy.jnet.tensor.core.backend.compute.Shaping;
 import com.aufy.jnet.tensor.core.impl.RawTensor;
 
 public class CoreShapeOps {
+  /*
+  keep this simple because coretensor will implement the rest
+   */
+
   public static RawTensor permute(RawTensor tensor, int... newOrder) {
     int[] newDims = new int[tensor.shape.length];
     int[] newStrides = new int[tensor.strides.length];

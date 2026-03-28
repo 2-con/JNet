@@ -2,21 +2,23 @@ package com.aufy.jnet.tensor.core.impl;
 import java.util.Arrays;
 
 import com.aufy.jnet.tensor.core.backend.compute.PointerLogic;
-import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
+import com.aufy.jnet.tensor.core.backend.util.ArrayTools;
 
 public class RawTensor {
   /* TODO: make RawTensor a memory allocator and manager for faster processing
   
   currently, Engine creates and allocate a new double[] every operation. although its fine, its better if there is a global pool to reuse memory
   and space. also, engine should also be purely functional without making any new double[]; rawtensor is fully responsible for memory stuff.
+  
+  also, rawtensor is purely iternal so it literally dosnt matter if these attributes are public or not, just make sure
+  to never expose them to the user or else the universe explodes (very bad)
   */
 
-  // these fineals wont do anything for these arrays
-  public final double[] data;
-  public final int[] shape;
-  public final int[] strides;
-  public final int rank;
-  public final int size;
+  public double[] data;
+  public int[] strides;
+  public int[] shape;
+  public int rank;
+  public int size;
   
   public RawTensor(double[] data, int... shape) {
     this.data = data.clone();
@@ -60,7 +62,7 @@ public class RawTensor {
     if (this.data == null || this.shape == null || this.data.length == 0) return "DataContainer[null]";
     
     String prefix = "DataContainer" + Arrays.toString(this.shape) + "(\n";
-    String content = ArrayOps.print(this.data, this.shape, this.strides, 0, 0, 2);
+    String content = ArrayTools.print(this.data, this.shape, this.strides, 0, 0, 2);
 
     return prefix + content + "\n)";
   }

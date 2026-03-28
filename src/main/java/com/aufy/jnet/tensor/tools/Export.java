@@ -9,17 +9,22 @@ import java.io.IOException;
 import com.aufy.jnet.tensor.core.impl.CoreTensor;
 
 public class Export {
+  /*
+  keep these bare-bones because more complex file IO should be handled by a seperate API that is NOT tensor.
+  eventually CSVs should be primary, but binary is fine for now
+   */
+
   public static void saveBinary(CoreTensor tensor, String path) {
     try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(path))) {
-        int[] shape = tensor.shape;
-        double[] data = tensor.dump();
+      int[] shape = tensor.shape;
+      double[] data = tensor.dump();
 
-        dos.writeInt(shape.length); // Save Rank
-        for (int dim : shape) dos.writeInt(dim); // Save Dimensions
-        for (double val : data) dos.writeDouble(val); // Save Values
+      dos.writeInt(shape.length); // Save Rank
+      for (int dim : shape) dos.writeInt(dim); // Save Dimensions
+      for (double val : data) dos.writeDouble(val); // Save Values
         
     } catch (IOException e) {
-        System.err.println("Export failed: " + e.getMessage());
+      System.err.println("Export failed: " + e.getMessage());
     }
   }
 

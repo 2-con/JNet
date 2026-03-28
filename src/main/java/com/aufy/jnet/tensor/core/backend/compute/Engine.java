@@ -1,61 +1,49 @@
 package com.aufy.jnet.tensor.core.backend.compute;
 
-import com.aufy.jnet.tensor.core.backend.util.ArrayTools;
+import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
 
 public class Engine {
-  public static double[] transformData(double[] gradOutput, int[] gradShape, int[] inputShape) {
-    double[] result = new double[ArrayTools.prod(inputShape)];
-    int[] inputStrides = PointerLogic.calculateStrides(inputShape);
-    int[] gradStrides  = PointerLogic.calculateStrides(gradShape);
+  /*
+  all operations should create a new tensor and morph the data directly. this engine might be reworked for optimization later
+  to save space and not cause the JVM to explode with new objects.
 
-    for (int i = 0; i < result.length; i++) {
-      int remaining = i;
-      int gradIndex = 0;
-
-      for (int dim = 0; dim < inputShape.length; dim++) {
-        int coord = (remaining / inputStrides[dim]) % inputShape[dim];
-        
-        if (gradShape[dim] != 1) {
-          gradIndex += coord * gradStrides[dim];
-        }
-      }
-      result[i] = gradOutput[gradIndex];
-    }
-    return result;
-  }
-
-  public static double[] broadcast(double[] data, int[] srcShape, int[] targetShape) {
-    int targetSize = ArrayTools.prod(targetShape);
-    int[] srcStrides = PointerLogic.calculateStrides(srcShape);
+  Engine is by far the closest thing to C or C++ with the amount of manual memory management, so keep a good eye on this one
+  because actually understanding what is going on here is very important.
+  */
+  
+  public static double[] broadcast(double[] data, int[] originalShape, int[] targetShape) {
+    int targetSize = ArrayOps.prod(targetShape);
+    int[] srcStrides = PointerLogic.calculateStrides(originalShape);
     int[] targetStrides = PointerLogic.calculateStrides(targetShape);
     
     double[] out = new double[targetSize];
 
     for (int i = 0; i < targetSize; i++) {
-      int srcIdx = 0;
+      int originalIndex = 0;
       int remaining = i;
 
       for (int dim = 0; dim < targetShape.length; dim++) {
         int coord = remaining / targetStrides[dim];
         remaining %= targetStrides[dim];
 
-        if (srcShape[dim] != 1) {
-          srcIdx += coord * srcStrides[dim];
+        if (originalShape[dim] != 1) {
+          originalIndex += coord * srcStrides[dim];
         }
       }
-      out[i] = data[srcIdx];
+      out[i] = data[originalIndex];
     }
     return out;
   }
 
   public static double[] contract(double[] dataA, int[] stridesA, double[] dataB, int[] stridesB, int[] shapeA, int[] axesA, int[] shapeB, int[] axesB, int[] resShape) {
-    double[] resData = new double[ArrayTools.prod(resShape)];
+    double[] resData = new double[ArrayOps.prod(resShape)];
     
     int[] subShape = Shaping.getSubShape(shapeA, axesA);
-    int contractVolume = ArrayTools.prod(subShape);
+    int contractVolume = ArrayOps.prod(subShape);
     
-    int[] kOffsetsA = Shaping.precomputeKOffsets(subShape, axesA, stridesA);
-    int[] kOffsetsB = Shaping.precomputeKOffsets(subShape, axesB, stridesB);
+    // speed thigs up by precomputing the offsets
+    int[] OffsetA = Shaping.findOffset(subShape, axesA, stridesA);
+    int[] OffsetB = Shaping.findOffset(subShape, axesB, stridesB);
     
     int[] resCoords = new int[resShape.length];
     int resIdx = 0;
@@ -66,7 +54,7 @@ public class Engine {
       double sum = 0;
 
       for (int k = 0; k < contractVolume; k++) {
-        sum += dataA[baseOffsetA + kOffsetsA[k]] * dataB[baseOffsetB + kOffsetsB[k]];
+        sum += dataA[baseOffsetA + OffsetA[k]] * dataB[baseOffsetB + OffsetB[k]];
       }
       resData[resIdx++] = sum;
 
@@ -75,125 +63,122 @@ public class Engine {
     return resData;
   }
 
-  public static double[] reduceSum(double[] gradData, int[] gradShape, int[] origShape) {
-    double[] reduced = new double[ArrayTools.prod(origShape)];
+  public static double[] reduceSum(double[] gradData, int[] gradShape, int[] originalShape) {
+    double[] reduced = new double[ArrayOps.prod(originalShape)];
     int[] gradStrides = PointerLogic.calculateStrides(gradShape);
-    int[] origStrides = PointerLogic.calculateStrides(origShape);
+    int[] origStrides = PointerLogic.calculateStrides(originalShape);
 
     for (int i = 0; i < gradData.length; i++) { // map over all grad data and map grads by reducing to the new shape
       int remaining = i;
-      int origIdx = 0;
+      int originalIndex = 0;
 
       for (int dim = 0; dim < gradShape.length; dim++) {
         int coord = (remaining / gradStrides[dim]) % gradShape[dim];
         
-        if (origShape[dim] != 1) {
-          origIdx += coord * origStrides[dim];
+        if (originalShape[dim] != 1) {
+          originalIndex += coord * origStrides[dim];
         }
       }
-      reduced[origIdx] += gradData[i];
+      reduced[originalIndex] += gradData[i];
     }
     return reduced;
   }
 
   public static double[] concat(int axis, int[][] shapes, double[][] dataList, int[] resultShape) {
-    double[] out = new double[ArrayTools.prod(resultShape)];
-    
+    double[] out = new double[ArrayOps.prod(resultShape)];
     int totalAxisDim = resultShape[axis];
     int outerCount = 1;
-    for (int i = 0; i < axis; i++) outerCount *= resultShape[i];
-    
     int innerSize = 1;
+
+    for (int i = 0; i < axis; i++) outerCount *= resultShape[i];
     for (int i = axis + 1; i < resultShape.length; i++) innerSize *= resultShape[i];
 
     int currentAxisOffset = 0;
     for (int i = 0; i < dataList.length; i++) {
-      double[] srcData = dataList[i];
-      int srcAxisDim = shapes[i][axis];
+      double[] originalData = dataList[i];
+      int originalAxisDimension = shapes[i][axis];
 
       for (int j = 0; j < outerCount; j++) {
-        // destination: jump over outer blocks, then jump to the current tensor's start in the axis
-        int destPos = (j * totalAxisDim * innerSize) + (currentAxisOffset * innerSize);
-        int srcPos = j * srcAxisDim * innerSize;
+        // jump over outer blocks, then jump to the current tensor's start in the axis
+        int finalPosition = (j * totalAxisDim * innerSize) + (currentAxisOffset * innerSize);
+        int originalPosition = j * originalAxisDimension * innerSize;
 
-        System.arraycopy(srcData, srcPos, out, destPos, srcAxisDim * innerSize);
+        System.arraycopy(originalData, originalPosition, out, finalPosition, originalAxisDimension * innerSize);
       }
-      currentAxisOffset += srcAxisDim;
+      currentAxisOffset += originalAxisDimension;
     }
     return out;
   }
 
   public static double[] stack(int axis, double[][] dataList, int[] resultShape) {
-    // In a contiguous model, stacking N tensors of size M is 
-    // identical to a single concat or a bulk copy if the inputs 
-    // are already contiguous.
-    double[] out = new double[ArrayTools.prod(resultShape)];
+    // in contiguous models, stacking N tensors of size M is like a single concat
+    double[] out = new double[ArrayOps.prod(resultShape)];
     int tensorSize = out.length / dataList.length;
     
     for (int i = 0; i < dataList.length; i++) {
       System.arraycopy(dataList[i], 0, out, i * tensorSize, tensorSize);
     }
 
-    // Note: If axis != 0, the simple block copy above only works if you reshape the result AFTER. For a true interleaved stack at 
-    // any axis, use the concat logic with reshaped inputs.
+    // if axis is not 0, block copy only works if the final result is reshape later in the tensors after the operation. 
+    // for a true stack at any axis, use the concat logic with reshaped inputs.
     return out; 
   }
 
-  public static double[] slice(double[] data, int[] shape, int[] strides, int axis, int sliceIdx) {
+  public static double[] slice(double[] data, int[] shape, int[] strides, int axis, int index) {
     int[] newShape = new int[shape.length - 1];
     for (int i = 0, k = 0; i < shape.length; i++) {
       if (i != axis) newShape[k++] = shape[i];
     }
 
-    double[] out = new double[ArrayTools.prod(newShape)];
+    double[] out = new double[ArrayOps.prod(newShape)];
     
     int sliceStride = strides[axis];
     // how many times the sliced dimension repeats in the heap
-    int outerIterations = (axis == 0) ? 1 : ArrayTools.prod(shape) / (shape[axis] * sliceStride);
+    int iterations = (axis == 0) ? 1 : ArrayOps.prod(shape) / (shape[axis] * sliceStride);
     
-    int currentPos = 0;
-    for (int i = 0; i < outerIterations; i++) {
+    int currentPosition = 0;
+    for (int i = 0; i < iterations; i++) {
       // move to the outer block, then jump to the specific slice index
-      int srcPos = (i * shape[axis] * sliceStride) + (sliceIdx * sliceStride);
+      int originalPosition = (i * shape[axis] * sliceStride) + (index * sliceStride);
       
-      System.arraycopy(data, srcPos, out, currentPos, sliceStride);
-      currentPos += sliceStride;
+      System.arraycopy(data, originalPosition, out, currentPosition, sliceStride);
+      currentPosition += sliceStride;
     }
     return out;
   }
 
   public static double[] rangedSlice(double[] data, int[] shape, int[] strides, int axis, int start, int end) {
-    int rangeDim = end - start;
+    int dimensionRange = end - start;
     int[] newShape = shape.clone();
-    newShape[axis] = rangeDim;
+    newShape[axis] = dimensionRange;
     
-    double[] out = new double[ArrayTools.prod(newShape)];
+    double[] out = new double[ArrayOps.prod(newShape)];
     
     int sliceStride = strides[axis];
-    int outerIterations = (axis == 0) ? 1 : ArrayTools.prod(shape) / (shape[axis] * sliceStride);
+    int iterations = (axis == 0) ? 1 : ArrayOps.prod(shape) / (shape[axis] * sliceStride);
     
-    int currentPos = 0;
-    for (int i = 0; i < outerIterations; i++) {
-      // Jump to outer block, then jump to the start of the range
-      int srcPos = (i * shape[axis] * sliceStride) + (start * sliceStride);
-      int length = rangeDim * sliceStride;
+    int currentPosition = 0;
+    for (int i = 0; i < iterations; i++) {
+      // jump to outer block, then jump to the start of the range
+      int originalPosition = (i * shape[axis] * sliceStride) + (start * sliceStride);
+      int length = dimensionRange * sliceStride;
       
-      System.arraycopy(data, srcPos, out, currentPos, length);
-      currentPos += length;
+      System.arraycopy(data, originalPosition, out, currentPosition, length);
+      currentPosition += length;
     }
     return out;
   }
 
   public static void place(double[] src, double[] dest, int[] destShape, int[] destStrides, int axis, int index) {
     int sliceStride = destStrides[axis];
-    int outerIterations = (axis == 0) ? 1 : ArrayTools.prod(destShape) / (destShape[axis] * sliceStride);
+    int iterations = (axis == 0) ? 1 : ArrayOps.prod(destShape) / (destShape[axis] * sliceStride);
     
-    int srcPos = 0;
-    for (int i = 0; i < outerIterations; i++) {
-      int destPos = (i * destShape[axis] * sliceStride) + (index * sliceStride);
+    int originalPosition = 0;
+    for (int i = 0; i < iterations; i++) {
+      int finalPosition = (i * destShape[axis] * sliceStride) + (index * sliceStride);
       
-      System.arraycopy(src, srcPos, dest, destPos, sliceStride);
-      srcPos += sliceStride;
+      System.arraycopy(src, originalPosition, dest, finalPosition, sliceStride);
+      originalPosition += sliceStride;
     }
   }
 }

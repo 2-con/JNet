@@ -1,12 +1,15 @@
 package com.aufy.jnet.tensor.core.backend.compute;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 
 import com.aufy.jnet.stats.primitive.Statistics;
-import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
+import com.aufy.jnet.tensor.core.backend.util.ArrayTools;
 
 public class Shaping {
+  /*
+  operates on the shape metadata. actual computation goes to engine.
+  */
+  
   public static int[] calculateResShape(int[] shapeA, int[] shapeB, int[] axesA, int[] axesB) {
     int[] survivorsA = getSurvivors(shapeA, axesA);
     int[] survivorsB = getSurvivors(shapeB, axesB);
@@ -92,12 +95,12 @@ public class Shaping {
     int[] result = new int[newRank];
 
     int shapePtr = 0;
-    for (int i = 0; i < newRank; i++) result[i] = (ArrayOps.contains(axes, i)) ? 1 : shape[shapePtr++];
+    for (int i = 0; i < newRank; i++) result[i] = (ArrayTools.contains(axes, i)) ? 1 : shape[shapePtr++];
     
     return result;
   }
 
-  public static int[] precomputeKOffsets(int[] subShape, int[] axes, int[] strides) {
+  public static int[] findOffset(int[] subShape, int[] axes, int[] strides) {
     int volume = Statistics.prod(subShape);
     int[] offsets = new int[volume];
     for (int k = 0; k < volume; k++) {

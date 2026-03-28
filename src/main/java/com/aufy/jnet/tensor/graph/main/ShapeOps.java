@@ -9,6 +9,10 @@ import com.aufy.jnet.tensor.core.impl.RawTensor;
 import com.aufy.jnet.tensor.functional.main.CoreShapeOps;
 
 public class ShapeOps {
+  /*
+  dont go overboard with the additions, Tensor will do the job. just add the core stuff and Tensor will do the rest
+  */
+  
   public static CoreTensor permute(CoreTensor tensor, int... axes) {
     CoreTensor out = new CoreTensor(CoreShapeOps.permute(tensor.core, axes));
     out.requiresGrad = tensor.requiresGrad;

@@ -1,8 +1,13 @@
 package com.aufy.jnet.tensor.core.backend.compute;
 
-import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
+import com.aufy.jnet.tensor.core.backend.util.ArrayTools;
 
 public class PointerLogic {
+  /*
+  for operations focused on the index logic itself. shapes and higher order descriptions are handled under shaping.
+  for now just keep these as tools shaping or engine uses
+  */
+  
   public static int[] calculateStrides(int[] shape) {
     int[] strides = new int[shape.length];
     int st = 1;
@@ -46,7 +51,7 @@ public class PointerLogic {
 
     int resPtr = isA ? 0 : (resCoords.length - (fullShape.length - axes.length));
     for (int i = 0; i < fullShape.length; i++) {
-      if (!ArrayOps.contains(axes, i)) {
+      if (!ArrayTools.contains(axes, i)) {
         fullCoords[i] = resCoords[resPtr++];
       }
     }

@@ -8,6 +8,10 @@ import com.aufy.jnet.tensor.core.backend.func.Binary;
 import com.aufy.jnet.tensor.core.impl.RawTensor;
 
 public class CoreBinaryOps {
+  /*
+  keep this simple because coretensor will implement the rest
+   */
+
   public static RawTensor elementwise(RawTensor a, RawTensor b, Binary operation) {
     if (!Arrays.equals(a.shape, b.shape)) {
       int[] broadcastShapeTarget = Shaping.broadcastedShape(a.shape, b.shape);

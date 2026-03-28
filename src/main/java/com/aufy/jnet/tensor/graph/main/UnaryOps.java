@@ -9,6 +9,10 @@ import com.aufy.jnet.tensor.functional.main.CoreBinaryOps;
 import com.aufy.jnet.tensor.functional.main.CoreUnaryOps;
 
 public class UnaryOps {
+  /*
+  dont go overboard with the additions, Tensor will do the job. just add the core stuff and Tensor will do the rest
+  */
+  
   // ==============================================================================================
   // GENERIC
   // ==============================================================================================

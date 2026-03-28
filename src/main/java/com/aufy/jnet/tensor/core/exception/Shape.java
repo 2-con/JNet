@@ -4,9 +4,13 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
-import com.aufy.jnet.tensor.core.backend.util.ArrayTools;
+import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
 
 public class Shape {
+  /*
+  make these the most readable since shaping is the primary way people mess up tensor ops
+  */
+
   private static String namingMessage(String operationName) {
     return (operationName == null || operationName.isBlank()) ? "" : " for " + operationName;
   }
@@ -35,8 +39,8 @@ public class Shape {
   }
 
   public static void verifySizeMatch(String operationName, int[] shapeA, int[] shapeB) {
-    int sizeA = ArrayTools.prod(shapeA);
-    int sizeB = ArrayTools.prod(shapeB);
+    int sizeA = ArrayOps.prod(shapeA);
+    int sizeB = ArrayOps.prod(shapeB);
     if (sizeA != sizeB) {
       throw new IllegalArgumentException("Mismatching sizes" + namingMessage(operationName) + ": cannot reshape " + Arrays.toString(shapeA) + "(size "+ sizeA + ") into shape " + Arrays.toString(shapeB) + "(size " + sizeB + ")");
     }

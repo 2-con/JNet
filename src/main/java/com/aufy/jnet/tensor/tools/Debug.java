@@ -6,10 +6,14 @@ import com.aufy.jnet.tensor.core.impl.CoreTensor;
 import com.aufy.jnet.tensor.core.impl.RawTensor;
 
 public class Debug {
+  /*
+  add the basic checkers for now
+   */
+
   public static void parse(RawTensor tensor) {
     double[] data = tensor.dump();
     for (double d : data) {
-      if (Double.isNaN(d)) throw new RuntimeException("Detected NaN in DataContaner");
+      if (Double.isNaN(d)) throw new RuntimeException("Detected NaN");
       if (Double.isInfinite(d)) System.err.println("Warning: Infinity detected");
     }
   }
@@ -17,7 +21,7 @@ public class Debug {
   public static void parse(CoreTensor tensor) {
     double[] data = tensor.dump();
     for (double d : data) {
-      if (Double.isNaN(d)) throw new RuntimeException("Detected NaN in DataContaner");
+      if (Double.isNaN(d)) throw new RuntimeException("Detected NaN");
       if (Double.isInfinite(d)) System.err.println("Warning: Infinity detected");
     }
   }

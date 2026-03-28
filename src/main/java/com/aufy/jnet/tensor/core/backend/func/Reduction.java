@@ -1,7 +1,7 @@
 package com.aufy.jnet.tensor.core.backend.func;
 import com.aufy.jnet.tensor.core.backend.compute.PointerLogic;
 import com.aufy.jnet.tensor.core.backend.compute.Shaping;
-import com.aufy.jnet.tensor.core.backend.util.ArrayTools;
+import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
 
 @FunctionalInterface
 public interface Reduction {
@@ -9,15 +9,15 @@ public interface Reduction {
   
   public static double[] apply(double[] data, int[] shape, int[] strides, int[] axes, Reduction operation, boolean keepDims) {
     int[] resShape = Shaping.getSurvivors(shape, axes);
-    double[] resData = new double[ArrayTools.prod(resShape)];
+    double[] resData = new double[ArrayOps.prod(resShape)];
     
     int[] subShape = Shaping.getSubShape(shape, axes); // size of one slice
-    int reductionVolume = ArrayTools.prod(subShape);
+    int reductionVolume = ArrayOps.prod(subShape);
     
     int[] resCoords = new int[resShape.length];
     int resIdx = 0;
     
-    double[] subShapeData = new double[ArrayTools.prod(subShape)];
+    double[] subShapeData = new double[ArrayOps.prod(subShape)];
 
     if (resShape.length == 0) {
       for (int k = 0; k < reductionVolume; k++) {

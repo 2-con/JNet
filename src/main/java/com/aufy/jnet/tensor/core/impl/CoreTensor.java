@@ -9,18 +9,23 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
-import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
+import com.aufy.jnet.tensor.core.backend.util.ArrayTools;
 import com.aufy.jnet.tensor.graph.init.TensorCoreGenerator;
 
 public class CoreTensor{
+  /*
+  unlike rawtensor, Tensor would inherit this so these public attributes are huge problems; need a way to hide these
+  from the user while keeping the engine clean and usable
+  */
+
   public static boolean verbose = false;
-  public final int rank;
-  public final int size;
-  public final int[] shape; // prevents array switching but does not prevent direct modifications
+  public int rank;
+  public int size;
+  public int[] shape;
   public boolean requiresGrad;
   public CoreTensor grad;
   
-  public final RawTensor core;
+  public RawTensor core;
   public List<CoreTensor> parents = new ArrayList<>();
   public Consumer<CoreTensor> derivative;
   public int[] allAxes;
@@ -74,7 +79,7 @@ public class CoreTensor{
     if (this.core.dump() == null || this.shape == null || this.core.dump().length == 0) return "TensorCore[null]";
 
     String prefix = "TensorCore" + Arrays.toString(this.shape) + "(\n";
-    String content = ArrayOps.print(this.core.dump(), this.shape, this.core.getStrides(), 0, 0, 2);
+    String content = ArrayTools.print(this.core.dump(), this.shape, this.core.getStrides(), 0, 0, 2);
     String suffix = " grad=" + this.requiresGrad;
 
     if (verbose) {
