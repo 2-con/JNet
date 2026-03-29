@@ -80,27 +80,7 @@ public class BinaryOps {
     return out;
   }
 
-  // ==============================================================================================
-  // IMPLEMENTATION
-  // ==============================================================================================
-
   public static CoreTensor add(CoreTensor tensorA, CoreTensor tensorB) {
     return elementwise(tensorA, tensorB, (x, y) -> x + y, (x, y) -> 1.0, (x, y) -> 1.0);
-  }
-
-  public static CoreTensor sub(CoreTensor tensorA, CoreTensor tensorB) {
-    return elementwise(tensorA, tensorB, (x, y) -> x - y, (x, y) -> 1.0, (x, y) -> -1.0);
-  }
-
-  public static CoreTensor hadamard(CoreTensor tensorA, CoreTensor tensorB) {
-    return elementwise(tensorA, tensorB, (x, y) -> x * y, (x, y) -> y, (x, y) -> x);
-  }
-
-  public static CoreTensor div(CoreTensor tensorA, CoreTensor tensorB) {
-    return elementwise(tensorA, tensorB, (x, y) -> x / y, (x, y) -> 1.0 / y, (x, y) -> -x / Math.pow(y, 2));
-  }
-
-  public static CoreTensor pow(CoreTensor tensorA, CoreTensor tensorB) {
-    return elementwise(tensorA, tensorB, (x, y) -> Math.pow(x, y), (x, y) -> y * Math.pow(x, y - 1), (x, y) -> Math.pow(x, y) * Math.log(x));
   }
 }

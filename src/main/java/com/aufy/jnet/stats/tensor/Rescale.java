@@ -1,35 +1,33 @@
 package com.aufy.jnet.stats.tensor;
 
-import com.aufy.jnet.tensor.core.impl.CoreTensor;
-import com.aufy.jnet.tensor.graph.main.BinaryOps;
-import com.aufy.jnet.tensor.graph.main.ReductionOps;
-import com.aufy.jnet.tensor.graph.main.UnaryOps;
+import com.aufy.jnet.Tensor;
+import com.aufy.jnet.tensor.core.backend.compute.Generator;
 
 public class Rescale {
-  public static CoreTensor standard(CoreTensor tensor){
-    CoreTensor mean = Measure.mean(tensor, tensor.allAxes);
-    CoreTensor stdev = Measure.stdev(tensor, tensor.allAxes);
+  public static Tensor standard(Tensor tensor){
+    Tensor mean = Measure.mean(tensor, Generator.arrange(tensor.rank));
+    Tensor stdev = Measure.stdev(tensor, Generator.arrange(tensor.rank));
 
-    return BinaryOps.div(BinaryOps.sub(tensor, mean), stdev);
+    return Tensor.div(Tensor.sub(tensor, mean), stdev);
   }
 
-  public static CoreTensor minMax(CoreTensor tensor){
-    CoreTensor max = ReductionOps.max(tensor, tensor.allAxes);
-    CoreTensor min = ReductionOps.min(tensor, tensor.allAxes);
+  public static Tensor minMax(Tensor tensor){
+    Tensor max = Tensor.max(tensor, Generator.arrange(tensor.rank));
+    Tensor min = Tensor.min(tensor, Generator.arrange(tensor.rank));
 
-    return BinaryOps.div(BinaryOps.sub(tensor, min), BinaryOps.sub(max, min));
-  }
-  
-  public static CoreTensor eobust(CoreTensor tensor){
-    CoreTensor median = Measure.median(tensor, tensor.allAxes);
-    CoreTensor iqr = Measure.iqr(tensor, tensor.allAxes);
-
-    return BinaryOps.div(BinaryOps.sub(tensor, median), iqr);
+    return Tensor.div(Tensor.sub(tensor, min), Tensor.sub(max, min));
   }
   
-  public static CoreTensor maxAbs(CoreTensor tensor){
-    CoreTensor maxAbs = ReductionOps.max(UnaryOps.apply(tensor, (n) -> Math.abs(n), (n) -> (n > 0) ? 1.0 : -1.0));
+  public static Tensor eobust(Tensor tensor){
+    Tensor median = Measure.median(tensor, Generator.arrange(tensor.rank));
+    Tensor iqr = Measure.iqr(tensor, Generator.arrange(tensor.rank));
+
+    return Tensor.div(Tensor.sub(tensor, median), iqr);
+  }
+  
+  public static Tensor maxAbs(Tensor tensor){
+    Tensor maxAbs = Tensor.max(Tensor.apply(tensor, (n) -> Math.abs(n), (n) -> (n > 0) ? 1.0 : -1.0));
     
-    return BinaryOps.div(tensor, maxAbs);
+    return Tensor.div(tensor, maxAbs);
   }
 }

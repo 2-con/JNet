@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.aufy.jnet.tensor.core.backend.compute.Engine;
 import com.aufy.jnet.tensor.core.backend.func.Reduction;
+import com.aufy.jnet.tensor.core.backend.util.ArrayOps;
 import com.aufy.jnet.tensor.core.backend.util.ArrayTools;
 import com.aufy.jnet.tensor.core.impl.CoreTensor;
 import com.aufy.jnet.tensor.core.impl.RawTensor;
@@ -12,15 +13,21 @@ import com.aufy.jnet.tensor.functional.main.CoreReductionOps;
 
 public class ReductionOps {
   /*
-  dont go overboard with the additions, Tensor will do the job. just add the core stuff and Tensor will do the rest
+  dont go overboard with the additions, Tensor will do the job. just add the core stuff and Tensor will do the rest.
+
+  reductionOps must make implementations because derivatives are not generalzable beyond the basics or composites.
   */
   
   public static CoreTensor reduce(CoreTensor tensor, Reduction operation, int... axes) {
     return new CoreTensor(CoreReductionOps.reduce(tensor.core, operation, axes)).noGrad();
   }
 
+  // ==============================================================================================
+  // IMPLEMENTATION
+  // ==============================================================================================
+
   public static CoreTensor sum(CoreTensor tensor, int... axes) {
-    CoreTensor out = new CoreTensor(CoreReductionOps.reduce(tensor.core, ReductionOps::sum, axes));
+    CoreTensor out = new CoreTensor(CoreReductionOps.reduce(tensor.core, ArrayOps::sum, axes));
     out.requiresGrad = tensor.requiresGrad;
 
     if (out.requiresGrad) {
@@ -37,7 +44,7 @@ public class ReductionOps {
   }
 
   public static CoreTensor prod(CoreTensor tensor, int... axes) {
-    CoreTensor out = new CoreTensor(CoreReductionOps.reduce(tensor.core, ReductionOps::prod, axes));
+    CoreTensor out = new CoreTensor(CoreReductionOps.reduce(tensor.core, ArrayOps::prod, axes));
 
     out.requiresGrad = tensor.requiresGrad;
 
@@ -83,7 +90,7 @@ public class ReductionOps {
   }
 
   public static CoreTensor max(CoreTensor tensor, int... axes) {
-    CoreTensor out = new CoreTensor(CoreReductionOps.reduce(tensor.core, ReductionOps::max, axes));
+    CoreTensor out = new CoreTensor(CoreReductionOps.reduce(tensor.core, ArrayOps::max, axes));
 
     out.requiresGrad = tensor.requiresGrad;
 
@@ -102,7 +109,7 @@ public class ReductionOps {
           mask[i] = (xData[i] == expandedOutput[i]) ? 1.0 : 0.0; // check if its max, if so, mask 1, else 0
         }
 
-        RawTensor countsRaw = CoreReductionOps.reduce(new RawTensor(mask, tensor.shape), ReductionOps::sum, axes);
+        RawTensor countsRaw = CoreReductionOps.reduce(new RawTensor(mask, tensor.shape), ArrayOps::sum, axes);
         double[] expandedCounts = Engine.broadcast(countsRaw.dump(), countsRaw.getShape(), tensor.shape);
 
         // distribute gradients
@@ -114,10 +121,6 @@ public class ReductionOps {
           }
         }
 
-        // int count = 0;
-        // for (double n: xData) count += (n == expandedOutput[0]) ? 1 : 0;
-        // for (int i = 0; i < gradInput.length; i++) gradInput[i] = (xData[i] == expandedOutput[i]) ? expandedGrads[i] / count : 0;
-
         tensor.accumulate(new CoreTensor(gradInput, tensor.shape));
       };
     }
@@ -126,7 +129,7 @@ public class ReductionOps {
   }
 
   public static CoreTensor min(CoreTensor tensor, int... axes) {
-    CoreTensor out = new CoreTensor(CoreReductionOps.reduce(tensor.core, ReductionOps::min, axes));
+    CoreTensor out = new CoreTensor(CoreReductionOps.reduce(tensor.core, ArrayOps::min, axes));
 
     out.requiresGrad = tensor.requiresGrad;
 
@@ -145,7 +148,7 @@ public class ReductionOps {
           mask[i] = (xData[i] == expandedOutput[i]) ? 1.0 : 0.0; // check if min, if so, mask 1, else 0
         }
 
-        RawTensor countsRaw = CoreReductionOps.reduce(new RawTensor(mask, tensor.shape), ReductionOps::sum, axes);
+        RawTensor countsRaw = CoreReductionOps.reduce(new RawTensor(mask, tensor.shape), ArrayOps::sum, axes);
         double[] expandedCounts = Engine.broadcast(countsRaw.dump(), countsRaw.getShape(), tensor.shape);
 
         // distribute gradients
@@ -162,33 +165,4 @@ public class ReductionOps {
 
     return out;
   }
-
-  // ==============================================================================================
-  // INTERNAL HELPER METHODS
-  // ==============================================================================================
-
-  private static double prod(double[] array) {
-    double ans = 1;
-    for (double n : array) ans *= n;
-    return ans;
-  }
-
-  private static double sum(double[] array) {
-    double ans = 0;
-    for (double n : array) ans += n;
-    return ans;
-  }
-
-  private static double min(double[] array) {
-    double ans = Double.MAX_VALUE;
-    for (double n : array) ans = (n < ans) ? n : ans;
-    return ans;
-  }
-
-  private static double max(double[] array) {
-    double ans = Double.MIN_VALUE;
-    for (double n : array) ans = (n > ans) ? n : ans;
-    return ans;
-  }
-
 }

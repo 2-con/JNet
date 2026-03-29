@@ -1,6 +1,8 @@
 package com.aufy.jnet.tensor.core.backend.compute;
 
 import java.util.Arrays;
+import java.util.stream.IntStream;
+
 import com.aufy.jnet.stats.primitive.Statistics;
 
 public class Generator {
@@ -30,5 +32,7 @@ public class Generator {
     return data;
   }
 
-
+  public static int[] arrange(int size) {
+    return IntStream.range(0, size + 1).toArray();
+  }
 }

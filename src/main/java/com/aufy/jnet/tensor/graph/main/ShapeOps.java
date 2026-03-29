@@ -152,9 +152,7 @@ public class ShapeOps {
       
       out.derivative = (grad) -> {
         // Gradient is smaller than input. Place it in a zero-filled array of original shape.
-        double[] expandedGradData = new double[tensor.core.getSize()];
-
-        Engine.place(grad.dump(), expandedGradData, tensor.core.getShape(), tensor.core.getStrides(), axis, index);
+        double[] expandedGradData = Engine.place(grad.dump(), tensor.core.getShape(), tensor.core.getStrides(), axis, index);
         tensor.grad = BinaryOps.add(tensor.grad, new CoreTensor(expandedGradData, tensor.core.getShape()));
       };
     }

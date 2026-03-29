@@ -8,12 +8,14 @@ public class Engine {
   to save space and not cause the JVM to explode with new objects.
 
   Engine is by far the closest thing to C or C++ with the amount of manual memory management, so keep a good eye on this one
-  because actually understanding what is going on here is very important.
+  because actually understanding what is going on here is very important. unlike C or C++, memory leaks are not an issue because
+  all tensor data is in one double[] that is stored neatly.
   */
   
+  // broadcasting only works for tensors of the same rank
   public static double[] broadcast(double[] data, int[] originalShape, int[] targetShape) {
     int targetSize = ArrayOps.prod(targetShape);
-    int[] srcStrides = PointerLogic.calculateStrides(originalShape);
+    int[] dataStrides = PointerLogic.calculateStrides(originalShape);
     int[] targetStrides = PointerLogic.calculateStrides(targetShape);
     
     double[] out = new double[targetSize];
@@ -22,14 +24,19 @@ public class Engine {
       int originalIndex = 0;
       int remaining = i;
 
+      // map over all the shapes in the targetshape. this keeps parsing the shapes for non 1-dim axes out of the original
+      // shape and modify the index to the orginal to pass. virtually, the pointer to the original stays while the transfer
+      // pointer into out[] keeps moving.
       for (int dim = 0; dim < targetShape.length; dim++) {
         int coord = remaining / targetStrides[dim];
         remaining %= targetStrides[dim];
 
+        // if its the dimension with a size of 1, dont move the copyer the index
         if (originalShape[dim] != 1) {
-          originalIndex += coord * srcStrides[dim];
+          originalIndex += coord * dataStrides[dim];
         }
       }
+
       out[i] = data[originalIndex];
     }
     return out;
@@ -47,6 +54,7 @@ public class Engine {
     
     int[] resCoords = new int[resShape.length];
     int resIdx = 0;
+
     do {
       int baseOffsetA = PointerLogic.mapToOffset(resCoords, new int[axesA.length], axesA, shapeA, stridesA, true);
       int baseOffsetB = PointerLogic.mapToOffset(resCoords, new int[axesB.length], axesB, shapeB, stridesB, false);
@@ -58,28 +66,31 @@ public class Engine {
       }
       resData[resIdx++] = sum;
 
-    } while (PointerLogic.nextCoordinate(resCoords, resShape));
+    } while (PointerLogic.nextCoordinate(resCoords, resShape)); // keep transfering while the index is still valid inside the new shape
 
     return resData;
   }
 
-  public static double[] reduceSum(double[] gradData, int[] gradShape, int[] originalShape) {
-    double[] reduced = new double[ArrayOps.prod(originalShape)];
-    int[] gradStrides = PointerLogic.calculateStrides(gradShape);
-    int[] origStrides = PointerLogic.calculateStrides(originalShape);
+  public static double[] reduceSum(double[] data, int[] originalShape, int[] targetShape) {
+    double[] reduced = new double[ArrayOps.prod(targetShape)];
+    int[] gradStrides = PointerLogic.calculateStrides(originalShape);
+    int[] origStrides = PointerLogic.calculateStrides(targetShape);
 
-    for (int i = 0; i < gradData.length; i++) { // map over all grad data and map grads by reducing to the new shape
+    for (int i = 0; i < data.length; i++) { // map over all grad data and map grads by reducing to the new shape
       int remaining = i;
       int originalIndex = 0;
 
-      for (int dim = 0; dim < gradShape.length; dim++) {
-        int coord = (remaining / gradStrides[dim]) % gradShape[dim];
+      // same like broadcasting but its the reverse: its basically ReductionOps::sum/CoreReductionOps::sum but for 
+      // the heap itself instead of calling backend.func.Reduction
+      for (int dim = 0; dim < originalShape.length; dim++) {
+        int coord = (remaining / gradStrides[dim]) % originalShape[dim];
         
-        if (originalShape[dim] != 1) {
+        // if its the dimension with a size of 1, dont move the copyer the index
+        if (targetShape[dim] != 1) {
           originalIndex += coord * origStrides[dim];
         }
       }
-      reduced[originalIndex] += gradData[i];
+      reduced[originalIndex] += data[i];
     }
     return reduced;
   }
@@ -169,7 +180,8 @@ public class Engine {
     return out;
   }
 
-  public static void place(double[] src, double[] dest, int[] destShape, int[] destStrides, int axis, int index) {
+  public static double[] place(double[] data, int[] destShape, int[] destStrides, int axis, int index) {
+    double[] out = new double[ArrayOps.prod(destShape)];
     int sliceStride = destStrides[axis];
     int iterations = (axis == 0) ? 1 : ArrayOps.prod(destShape) / (destShape[axis] * sliceStride);
     
@@ -177,8 +189,10 @@ public class Engine {
     for (int i = 0; i < iterations; i++) {
       int finalPosition = (i * destShape[axis] * sliceStride) + (index * sliceStride);
       
-      System.arraycopy(src, originalPosition, dest, finalPosition, sliceStride);
+      System.arraycopy(data, originalPosition, out, finalPosition, sliceStride);
       originalPosition += sliceStride;
     }
+
+    return out;
   }
 }

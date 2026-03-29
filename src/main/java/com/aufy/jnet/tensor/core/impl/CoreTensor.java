@@ -13,11 +13,6 @@ import com.aufy.jnet.tensor.core.backend.util.ArrayTools;
 import com.aufy.jnet.tensor.graph.init.TensorCoreGenerator;
 
 public class CoreTensor{
-  /*
-  unlike rawtensor, Tensor would inherit this so these public attributes are huge problems; need a way to hide these
-  from the user while keeping the engine clean and usable
-  */
-
   public static boolean verbose = false;
   public int rank;
   public int size;
@@ -28,7 +23,6 @@ public class CoreTensor{
   public RawTensor core;
   public List<CoreTensor> parents = new ArrayList<>();
   public Consumer<CoreTensor> derivative;
-  public int[] allAxes;
   
   public CoreTensor(double[] data, int... shape) {
     this(new RawTensor(data, shape));
@@ -40,7 +34,6 @@ public class CoreTensor{
     this.shape = core.getShape();
     this.size = core.getSize();
     this.rank = core.getRank();
-    this.allAxes = IntStream.range(0, this.rank + 1).toArray();
   }
 
   // ########################################################################################################### //
@@ -53,6 +46,7 @@ public class CoreTensor{
     return out;
   }
   
+  public CoreTensor clone() {return clone(this);}
   public static CoreTensor clone(CoreTensor tensor) {
     return new CoreTensor(tensor.dump(), tensor.shape);
   }
@@ -76,9 +70,9 @@ public class CoreTensor{
 
   @Override
   public String toString() {
-    if (this.core.dump() == null || this.shape == null || this.core.dump().length == 0) return "TensorCore[null]";
+    if (this.core.dump() == null || this.shape == null || this.core.dump().length == 0) return "Tensor[null]";
 
-    String prefix = "TensorCore" + Arrays.toString(this.shape) + "(\n";
+    String prefix = "Tensor" + Arrays.toString(this.shape) + "(\n";
     String content = ArrayTools.print(this.core.dump(), this.shape, this.core.getStrides(), 0, 0, 2);
     String suffix = " grad=" + this.requiresGrad;
 

@@ -13,10 +13,6 @@ public class UnaryOps {
   dont go overboard with the additions, Tensor will do the job. just add the core stuff and Tensor will do the rest
   */
   
-  // ==============================================================================================
-  // GENERIC
-  // ==============================================================================================
-
   public static CoreTensor apply(CoreTensor tensor, Unary operation, Unary derivative) {
     CoreTensor out = new CoreTensor(CoreUnaryOps.apply(tensor.core, operation));
 
@@ -33,21 +29,5 @@ public class UnaryOps {
     }
 
     return out;
-  }
-
-  // ==============================================================================================
-  // IMPLEMENTATION
-  // ==============================================================================================
-
-  public static CoreTensor add(CoreTensor tensor, double scalar) {
-    return apply(tensor, (a) -> a + scalar, (a) -> 1.0);
-  }
-
-  public static CoreTensor mul(CoreTensor tensor, double scalar) {
-    return apply(tensor, (a) -> a * scalar, (a) -> scalar);
-  }
-  
-  public static CoreTensor pow(CoreTensor tensor, double scalar) {
-    return apply(tensor, (a) -> Math.pow(a, scalar), (a) -> scalar * Math.pow(a, scalar - 1.0));
   }
 }

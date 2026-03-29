@@ -59,9 +59,9 @@ public class RawTensor {
 
   @Override
   public String toString() {
-    if (this.data == null || this.shape == null || this.data.length == 0) return "DataContainer[null]";
+    if (this.data == null || this.shape == null || this.data.length == 0) return "RawTensor[null]";
     
-    String prefix = "DataContainer" + Arrays.toString(this.shape) + "(\n";
+    String prefix = "RawTensor" + Arrays.toString(this.shape) + "(\n";
     String content = ArrayTools.print(this.data, this.shape, this.strides, 0, 0, 2);
 
     return prefix + content + "\n)";
