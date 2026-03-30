@@ -3,7 +3,7 @@ package com.aufy.jnet.tensor.functional.init;
 import com.aufy.jnet.tensor.core.backend.compute.Generator;
 import com.aufy.jnet.tensor.core.impl.RawTensor;
 
-public class DataContainerGenerator {
+public class RawTensorGenerator {
   /*
   possibly the most useless bundle of methods ever made: core tensor already has these? ill find an implementation that 
   makes sense soon
